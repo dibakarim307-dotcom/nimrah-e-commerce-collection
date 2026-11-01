@@ -1,0 +1,6 @@
+{
+  "name": "Nimrah Collection - E-Commerce & Retail POS",
+  "description": "Luxury fashion e-commerce boutique with integrated retail POS system, seamless live inventory synchronization, M-Pesa Till payment processing, WhatsApp shop inquiries and tracking, and automatic tax invoice and thermal receipt generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
