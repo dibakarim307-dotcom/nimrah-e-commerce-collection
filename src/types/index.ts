@@ -126,11 +126,13 @@ export interface AiChatMessage {
   actionLabel?: string;
 }
 
+export type PosRole = 'Shop Owner' | 'System Admin' | 'Lead Cashier' | 'Supervisor';
+
 export interface PosStaffUser {
   id: string;
   name: string;
   email: string;
-  role: 'Store Director' | 'Lead Cashier' | 'Supervisor';
+  role: PosRole;
   branch: string;
   badgeNumber: string;
 }

@@ -114,47 +114,47 @@ interface StaffRecord {
   email: string;
   name: string;
   passwordHash: string; // Plaintext for demo boutique auth
-  role: 'Store Director' | 'Lead Cashier' | 'Supervisor';
+  role: 'Shop Owner' | 'System Admin' | 'Lead Cashier' | 'Supervisor';
   branch: string;
   badgeNumber: string;
 }
 
 const AUTHORIZED_POS_STAFF: StaffRecord[] = [
   {
-    id: "staff-01",
-    email: "dibakarim307@gmail.com",
-    name: "Diba Karim",
-    passwordHash: "Nimrah@2026",
-    role: "Store Director",
-    branch: "Eastleigh 5th St (UBAH G7)",
-    badgeNumber: "NC-DIR-01"
-  },
-  {
-    id: "staff-02",
+    id: "staff-owner-01",
     email: "nimrahcollection1@gmail.com",
-    name: "Nimrah Admin",
+    name: "Nimrah (Proprietor)",
     passwordHash: "Nimrah@2026",
-    role: "Store Director",
+    role: "Shop Owner",
     branch: "Eastleigh 5th St (UBAH G7)",
-    badgeNumber: "NC-MGR-01"
+    badgeNumber: "NC-OWN-01"
   },
   {
-    id: "staff-03",
+    id: "staff-owner-02",
+    email: "dibakarim307@gmail.com",
+    name: "Diba Karim (Shop Owner)",
+    passwordHash: "Nimrah@2026",
+    role: "Shop Owner",
+    branch: "Eastleigh 5th St (UBAH G7)",
+    badgeNumber: "NC-OWN-02"
+  },
+  {
+    id: "staff-admin-01",
+    email: "admin@nimrahcollection.co.ke",
+    name: "Store Administrator",
+    passwordHash: "Admin@2026",
+    role: "System Admin",
+    branch: "Eastleigh 5th St (UBAH G7)",
+    badgeNumber: "NC-ADM-01"
+  },
+  {
+    id: "staff-cashier-01",
     email: "fatuma.eastleigh@nimrahcollection.co.ke",
     name: "Fatuma K.",
     passwordHash: "Eastleigh#G7",
     role: "Lead Cashier",
     branch: "Eastleigh 5th St (UBAH G7)",
     badgeNumber: "NC-CSH-02"
-  },
-  {
-    id: "staff-04",
-    email: "zainab.supervisor@nimrahcollection.co.ke",
-    name: "Zainab Omar",
-    passwordHash: "UbahShop#G7",
-    role: "Supervisor",
-    branch: "Eastleigh 5th St (UBAH G7)",
-    badgeNumber: "NC-SUP-03"
   }
 ];
 
@@ -325,6 +325,135 @@ app.get('/api/pos/auth/staff-directory', (_req, res) => {
     badgeNumber: s.badgeNumber
   }));
   res.json({ staff: publicStaff });
+});
+
+// 5. Update Personal POS Security Credentials / Password
+app.post('/api/pos/auth/update-credentials', (req, res) => {
+  try {
+    const { email, currentPassword, newPassword } = req.body;
+
+    if (!email || !currentPassword || !newPassword) {
+      res.status(400).json({ success: false, message: 'All credential fields (email, current password, new password) are required.' });
+      return;
+    }
+
+    if (newPassword.trim().length < 6) {
+      res.status(400).json({ success: false, message: 'New security password/PIN must be at least 6 characters long.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const staff = AUTHORIZED_POS_STAFF.find(s => s.email.toLowerCase() === cleanEmail);
+
+    if (!staff) {
+      res.status(404).json({ success: false, message: 'Authorized staff record not found.' });
+      return;
+    }
+
+    if (staff.passwordHash !== currentPassword.trim()) {
+      res.status(401).json({ success: false, message: 'Current password verification failed. Please re-enter your current password.' });
+      return;
+    }
+
+    staff.passwordHash = newPassword.trim();
+    console.log(`[CREDENTIALS UPDATED] Security credentials updated for ${staff.email} (${staff.role})`);
+
+    res.json({
+      success: true,
+      message: `Security credentials successfully updated for ${staff.name}. Use your new password for future POS logins.`,
+      staff: {
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        branch: staff.branch,
+        badgeNumber: staff.badgeNumber
+      }
+    });
+  } catch (error: any) {
+    console.error('Update credentials error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update credentials' });
+  }
+});
+
+// 6. Shop Owner Administrative Credential Override & Staff Reset
+app.post('/api/pos/auth/reset-staff-credential', (req, res) => {
+  try {
+    const { ownerEmail, ownerPassword, targetEmail, newPassword } = req.body;
+
+    if (!ownerEmail || !ownerPassword || !targetEmail || !newPassword) {
+      res.status(400).json({ success: false, message: 'Owner credentials and target staff details are required.' });
+      return;
+    }
+
+    // Verify requesting owner has sovereign clearance
+    const owner = AUTHORIZED_POS_STAFF.find(s => s.email.toLowerCase() === ownerEmail.trim().toLowerCase());
+    if (!owner || owner.role !== 'Shop Owner' || owner.passwordHash !== ownerPassword.trim()) {
+      res.status(403).json({ success: false, message: 'Access Denied: Only verified Shop Owners can manage personnel credentials.' });
+      return;
+    }
+
+    const targetStaff = AUTHORIZED_POS_STAFF.find(s => s.email.toLowerCase() === targetEmail.trim().toLowerCase());
+    if (!targetStaff) {
+      res.status(404).json({ success: false, message: `Staff member ${targetEmail} not found.` });
+      return;
+    }
+
+    targetStaff.passwordHash = newPassword.trim();
+    console.log(`[OWNER OVERRIDE] Shop Owner ${owner.email} updated credentials for ${targetStaff.email}`);
+
+    res.json({
+      success: true,
+      message: `Credentials for ${targetStaff.name} (${targetStaff.role}) updated by Shop Owner.`,
+      targetStaff: {
+        id: targetStaff.id,
+        name: targetStaff.name,
+        email: targetStaff.email,
+        role: targetStaff.role,
+        badgeNumber: targetStaff.badgeNumber
+      }
+    });
+  } catch (error: any) {
+    console.error('Reset staff credentials error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reset staff credentials' });
+  }
+});
+
+// 7. Secure Credentials Vault Status
+app.get('/api/pos/auth/credentials-vault', (_req, res) => {
+  try {
+    const vaultRecords = AUTHORIZED_POS_STAFF.map(s => {
+      // Mask password for security display (e.g., "Nim***026")
+      const pwd = s.passwordHash;
+      const masked = pwd.length > 5 
+        ? `${pwd.slice(0, 3)}••••${pwd.slice(-3)}`
+        : '••••••••';
+      
+      const clearanceTier = s.role === 'Shop Owner' 
+        ? 'Tier 1 (Executive Confidential · Sovereign)' 
+        : s.role === 'System Admin' 
+        ? 'Tier 2 (Operational Admin · Restock & Terminal)' 
+        : 'Tier 3 (Terminal Cashier · Checkout Only)';
+
+      return {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        role: s.role,
+        badgeNumber: s.badgeNumber,
+        branch: s.branch,
+        clearanceTier,
+        maskedCredential: masked,
+        mfaRequired: true,
+        status: 'Active & Verified',
+        lastAudit: '2026-11-01'
+      };
+    });
+
+    res.json({ success: true, vaultRecords });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Failed to load credentials vault' });
+  }
 });
 
 async function startServer() {

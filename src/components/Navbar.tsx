@@ -12,7 +12,9 @@ import {
   X,
   Sparkles,
   MapPin,
-  Bot
+  Bot,
+  Crown,
+  ShieldCheck
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { cleanPhoneNumber } from '../utils/whatsapp';
@@ -31,7 +33,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
     setIsCartDrawerOpen, 
     setIsTrackingModalOpen,
     setIsSettingsModalOpen,
-    setIsAiAssistantOpen
+    setIsAiAssistantOpen,
+    posStaffUser,
+    posPortalIntent,
+    setPosPortalIntent
   } = useStore();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -128,13 +133,40 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
             Abayas &amp; Fragrance
           </button>
 
-          <button 
-            onClick={() => handleNavClick('pos')}
-            className={`cursor-pointer transition-colors py-1 hover:text-amber-300 flex items-center gap-1.5 ${activeView === 'pos' ? 'text-amber-400 font-semibold border-b-2 border-amber-400' : ''}`}
-          >
-            <Store className="w-4 h-4 text-amber-400" />
-            <span>Store POS</span>
-          </button>
+          {/* Separated POS Links for Shop Owner and Admin */}
+          <div className="flex items-center gap-1 bg-[#14141c] p-1 rounded-xl border border-stone-800">
+            <button 
+              onClick={() => {
+                setPosPortalIntent('owner');
+                handleNavClick('pos');
+              }}
+              className={`cursor-pointer transition-all px-2.5 py-1 text-xs rounded-lg flex items-center gap-1.5 font-medium ${
+                activeView === 'pos' && posStaffUser?.role === 'Shop Owner'
+                  ? 'bg-amber-400 text-stone-950 font-bold shadow-xs' 
+                  : 'text-amber-300 hover:text-white hover:bg-stone-800/60'
+              }`}
+              title="Shop Owner POS Terminal (Financial Sovereignty & P&L)"
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>Owner POS</span>
+            </button>
+
+            <button 
+              onClick={() => {
+                setPosPortalIntent('admin');
+                handleNavClick('pos');
+              }}
+              className={`cursor-pointer transition-all px-2.5 py-1 text-xs rounded-lg flex items-center gap-1.5 font-medium ${
+                activeView === 'pos' && posStaffUser?.role === 'System Admin'
+                  ? 'bg-stone-200 text-stone-950 font-bold shadow-xs' 
+                  : 'text-stone-300 hover:text-white hover:bg-stone-800/60'
+              }`}
+              title="System Admin POS Terminal (Operations & Inventory Register)"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-stone-300" />
+              <span>Admin POS</span>
+            </button>
+          </div>
 
           <button 
             onClick={() => handleNavClick('inventory')}
@@ -206,13 +238,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
 
           {/* POS Terminal Quick Switch */}
           {activeView !== 'pos' ? (
-            <button 
-              onClick={() => setActiveView('pos')}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors cursor-pointer shadow-sm"
-            >
-              <Store className="w-3.5 h-3.5" />
-              <span>Launch POS</span>
-            </button>
+            <div className="hidden md:flex items-center gap-1.5">
+              <button 
+                onClick={() => {
+                  setPosPortalIntent('owner');
+                  setActiveView('pos');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors cursor-pointer shadow-sm"
+                title="Open Shop Owner POS Portal"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>Owner POS</span>
+              </button>
+              <button 
+                onClick={() => {
+                  setPosPortalIntent('admin');
+                  setActiveView('pos');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-stone-200 bg-[#16161f] hover:bg-stone-800 border border-stone-700 rounded-lg transition-colors cursor-pointer"
+                title="Open System Admin POS Portal"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-stone-300" />
+                <span>Admin</span>
+              </button>
+            </div>
           ) : (
             <button 
               onClick={() => setActiveView('storefront')}
@@ -266,16 +315,44 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
             >
               Storefront Collection
             </button>
-            <button 
-              onClick={() => handleNavClick('pos')}
-              className={`text-left px-3 py-2 text-sm font-medium rounded-lg flex items-center justify-between ${activeView === 'pos' ? 'bg-amber-950 text-amber-300 font-bold border border-amber-500/40' : 'text-stone-300'}`}
-            >
-              <span className="flex items-center gap-2">
-                <Store className="w-4 h-4 text-amber-400" />
-                <span>Boutique POS System</span>
-              </span>
-              <span className="text-[11px] font-mono bg-amber-400 text-stone-950 font-bold px-1.5 py-0.5 rounded">Till: {settings.mpesaTillNumber}</span>
-            </button>
+            {/* Mobile Separated POS Links */}
+            <div className="grid grid-cols-2 gap-2 pt-1 pb-1">
+              <button 
+                onClick={() => {
+                  setPosPortalIntent('owner');
+                  handleNavClick('pos');
+                }}
+                className={`text-left px-3 py-2 text-xs font-medium rounded-lg flex items-center justify-between border ${
+                  activeView === 'pos' && posStaffUser?.role === 'Shop Owner' 
+                    ? 'bg-amber-400 text-stone-950 font-bold border-amber-300' 
+                    : 'bg-[#15151e] text-amber-300 border-amber-500/30'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 font-bold">
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Owner POS</span>
+                </span>
+                <span className="text-[10px] font-mono text-stone-400">P&amp;L</span>
+              </button>
+
+              <button 
+                onClick={() => {
+                  setPosPortalIntent('admin');
+                  handleNavClick('pos');
+                }}
+                className={`text-left px-3 py-2 text-xs font-medium rounded-lg flex items-center justify-between border ${
+                  activeView === 'pos' && posStaffUser?.role === 'System Admin' 
+                    ? 'bg-stone-200 text-stone-950 font-bold border-white' 
+                    : 'bg-[#15151e] text-stone-300 border-stone-800'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-stone-300" />
+                  <span>Admin POS</span>
+                </span>
+                <span className="text-[10px] font-mono text-stone-400">Sales</span>
+              </button>
+            </div>
             <button 
               onClick={() => {
                 setIsAiAssistantOpen(true);

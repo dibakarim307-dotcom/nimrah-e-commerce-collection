@@ -20,12 +20,18 @@ import {
   ShieldCheck,
   AlertTriangle,
   X,
-  LogOut
+  LogOut,
+  Crown,
+  KeyRound,
+  Lock,
+  BadgeCheck
 } from 'lucide-react';
 import { Product, ProductCategory, PaymentMethod } from '../types';
 import { useStore } from '../context/StoreContext';
 import { formatCurrency, generateMpesaCode } from '../utils/formatters';
 import { PosAuthModal } from './PosAuthModal';
+import { OwnerExecutiveHubModal } from './OwnerExecutiveHubModal';
+import { StaffCredentialsModal } from './StaffCredentialsModal';
 
 export const POSTerminal: React.FC = () => {
   const {
@@ -35,6 +41,7 @@ export const POSTerminal: React.FC = () => {
     settings,
     setActiveView,
     posStaffUser,
+    posPortalIntent,
     logoutPosStaff,
     posCashierName,
     setPosCashierName,
@@ -79,6 +86,8 @@ export const POSTerminal: React.FC = () => {
   // Held carts drawer
   const [showHeldCartsModal, setShowHeldCartsModal] = useState(false);
   const [holdLabelInput, setHoldLabelInput] = useState('');
+  const [isOwnerHubOpen, setIsOwnerHubOpen] = useState(false);
+  const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
 
   const { subtotal, discount, tax, total, count } = getPosCartTotals();
 
@@ -201,8 +210,16 @@ export const POSTerminal: React.FC = () => {
 
   // If not logged in as authorized staff, display secure authentication portal
   if (!posStaffUser) {
-    return <PosAuthModal onCancel={() => setActiveView('storefront')} />;
+    return (
+      <PosAuthModal 
+        initialRole={posPortalIntent}
+        onCancel={() => setActiveView('storefront')} 
+      />
+    );
   }
+
+  const isShopOwner = posStaffUser.role === 'Shop Owner';
+  const isAdmin = posStaffUser.role === 'System Admin';
 
   return (
     <div className="min-h-screen bg-[#09090c] text-stone-100 flex flex-col font-sans select-none">
@@ -220,24 +237,46 @@ export const POSTerminal: React.FC = () => {
           <div className="h-5 w-px bg-stone-800 hidden sm:block" />
 
           <div className="flex items-center gap-2">
-            <StoreIcon className="w-4 h-4 text-amber-400" />
+            {isShopOwner ? (
+              <div className="w-6 h-6 rounded-lg bg-amber-400 text-stone-950 flex items-center justify-center font-bold">
+                <Crown className="w-3.5 h-3.5" />
+              </div>
+            ) : (
+              <StoreIcon className="w-4 h-4 text-stone-300" />
+            )}
             <span className="font-serif text-lg font-semibold tracking-tight text-white">
               {settings.storeName} POS
             </span>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/80">
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded border uppercase font-bold ${
+              isShopOwner 
+                ? 'bg-amber-400 text-stone-950 border-amber-300' 
+                : 'bg-stone-800 text-stone-200 border-stone-700'
+            }`}>
+              {isShopOwner ? '👑 Owner Portal' : '🛡️ Admin Portal'}
+            </span>
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/80 hidden md:inline">
               Till: {settings.mpesaTillNumber}
             </span>
           </div>
         </div>
 
         {/* Register summary stats & Authenticated Staff */}
-        <div className="hidden md:flex items-center gap-4 text-xs font-mono">
-          <div className="flex items-center gap-1.5 bg-[#16161d] px-2.5 py-1 rounded-lg border border-amber-500/20">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-stone-400">Staff:</span>
-            <span className="font-bold text-amber-300">{posStaffUser.name}</span>
+        <div className="hidden md:flex items-center gap-3 text-xs font-mono">
+          <button 
+            onClick={() => setIsCredentialsModalOpen(true)}
+            title="View Security Credentials & Confidentiality Clearance"
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer hover:scale-[1.02] ${
+              isShopOwner 
+                ? 'bg-amber-950/40 border-amber-500/40 text-amber-200 hover:border-amber-400' 
+                : 'bg-[#16161d] border-stone-800 text-stone-300 hover:border-stone-700'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isShopOwner ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
+            <span className="text-stone-400">{posStaffUser.role}:</span>
+            <span className="font-bold text-white">{posStaffUser.name}</span>
             <span className="text-[10px] text-stone-400">({posStaffUser.badgeNumber})</span>
-          </div>
+            <KeyRound className="w-3 h-3 text-amber-400 ml-1" />
+          </button>
 
           <div className="flex items-center gap-1.5 bg-[#16161d] px-2.5 py-1 rounded-lg border border-stone-800">
             <span className="text-stone-400">Shift Total:</span>
@@ -249,6 +288,31 @@ export const POSTerminal: React.FC = () => {
 
         {/* Quick action buttons & Lock */}
         <div className="flex items-center gap-2">
+          {/* Security Credentials Modal Button */}
+          <button
+            onClick={() => setIsCredentialsModalOpen(true)}
+            title="Security Credentials, ID Badge & Password Management"
+            className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 border transition-all cursor-pointer ${
+              isShopOwner
+                ? 'bg-amber-950/50 text-amber-300 border-amber-500/40 hover:bg-amber-900/60'
+                : 'bg-stone-800/80 text-stone-200 border-stone-700 hover:bg-stone-700'
+            }`}
+          >
+            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Credentials</span>
+          </button>
+
+          {/* Shop Owner Executive Hub Button */}
+          {isShopOwner && (
+            <button
+              onClick={() => setIsOwnerHubOpen(true)}
+              className="px-3 py-1.5 text-xs font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-lg flex items-center gap-1.5 shadow-md shadow-amber-950/40 cursor-pointer transition-all hover:scale-105"
+            >
+              <Crown className="w-3.5 h-3.5 text-stone-950" />
+              <span>Owner Suite (P&amp;L)</span>
+            </button>
+          )}
+
           {heldCarts.length > 0 && (
             <button 
               onClick={() => setShowHeldCartsModal(true)}
@@ -266,17 +330,63 @@ export const POSTerminal: React.FC = () => {
             Inventory
           </button>
 
-          {/* Lock Register / Sign Out */}
+          {/* Switch Role / Lock Register */}
           <button
             onClick={logoutPosStaff}
-            title="Lock Register & Sign Out"
+            title="Switch Personnel Role or Lock POS"
             className="px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Lock POS</span>
+            <span className="hidden sm:inline">Switch Role</span>
           </button>
         </div>
       </header>
+
+      {/* Role-Specific Status Banner */}
+      {isShopOwner ? (
+        <div className="bg-gradient-to-r from-amber-950/70 via-[#19140c] to-amber-950/70 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between text-xs text-amber-200">
+          <div className="flex items-center gap-2">
+            <Crown className="w-4 h-4 text-amber-400" />
+            <span className="font-bold text-white uppercase tracking-wider text-[11px]">Shop Owner Executive Mode</span>
+            <span className="text-amber-500/50">·</span>
+            <span className="font-mono text-[11px] text-amber-300">Live Profit Margins, Till 5428901 Settlements &amp; Wholesale Price Control</span>
+          </div>
+          <div className="flex items-center gap-3 font-mono text-[11px]">
+            <button 
+              onClick={() => setIsCredentialsModalOpen(true)}
+              className="px-2 py-1 bg-amber-950 border border-amber-500/40 text-amber-300 font-semibold rounded hover:bg-amber-900 cursor-pointer transition-colors"
+            >
+              Security ID Card
+            </button>
+            <button 
+              onClick={() => setIsOwnerHubOpen(true)}
+              className="px-2.5 py-1 bg-amber-400 text-stone-950 font-bold rounded hover:bg-amber-300 cursor-pointer transition-colors shadow-xs"
+            >
+              Open Owner P&amp;L Hub →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-r from-stone-900 via-[#131317] to-stone-900 border-b border-stone-800 px-4 py-2 flex items-center justify-between text-xs text-stone-300">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-stone-300" />
+            <span className="font-bold text-white uppercase tracking-wider text-[11px]">System Admin Operations Mode</span>
+            <span className="text-stone-600">·</span>
+            <span className="font-mono text-[11px] text-stone-400">Barcode Scanning, Register Checkout &amp; Shift Balancing</span>
+          </div>
+          <div className="flex items-center gap-2 font-mono text-[11px] text-stone-400">
+            <span className="bg-rose-950/50 text-rose-300 px-2 py-0.5 rounded border border-rose-800/40 flex items-center gap-1">
+              <Lock className="w-3 h-3 text-rose-400" /> Confidential: Owner Financials Redacted
+            </span>
+            <button 
+              onClick={() => setIsCredentialsModalOpen(true)}
+              className="text-amber-400 hover:underline cursor-pointer ml-1"
+            >
+              Clearance Info →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. Main POS Workspace: Left Catalog + Right Ticket */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -379,8 +489,26 @@ export const POSTerminal: React.FC = () => {
                     <div className="text-xs font-semibold text-white line-clamp-1 mt-0.5">
                       {product.name}
                     </div>
-                    <div className="text-xs font-mono font-bold text-amber-300 mt-1 tabular-nums">
-                      {formatCurrency(product.price, settings.currency)}
+                    <div className="flex items-center justify-between text-xs font-mono font-bold mt-1">
+                      <span className="text-amber-300 tabular-nums">
+                        {formatCurrency(product.price, settings.currency)}
+                      </span>
+                      {isShopOwner ? (
+                        <span className="text-[10px] text-emerald-400 font-normal" title="Executive Tier 1 Cost Margin">
+                          Cost: {formatCurrency(product.costPrice, settings.currency)}
+                        </span>
+                      ) : (
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCredentialsModalOpen(true);
+                          }}
+                          title="Confidential: Shop Owner Clearance Required"
+                          className="text-[9px] text-stone-500 font-normal hover:text-amber-400 flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Lock className="w-2.5 h-2.5 text-stone-600" /> [Confidential Cost]
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -946,6 +1074,18 @@ export const POSTerminal: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Shop Owner Executive Hub Modal (Financials, Cost/Price Authority, Staff Directory, Till Settings) */}
+      <OwnerExecutiveHubModal 
+        isOpen={isOwnerHubOpen} 
+        onClose={() => setIsOwnerHubOpen(false)} 
+      />
+
+      {/* Staff Security Credentials & Clearance Modal */}
+      <StaffCredentialsModal
+        isOpen={isCredentialsModalOpen}
+        onClose={() => setIsCredentialsModalOpen(false)}
+      />
     </div>
   );
 };

@@ -51,6 +51,8 @@ interface StoreContextType {
   
   // POS operations & Authorized Staff
   posStaffUser: PosStaffUser | null;
+  posPortalIntent: 'owner' | 'admin';
+  setPosPortalIntent: (intent: 'owner' | 'admin') => void;
   loginPosStaff: (user: PosStaffUser) => void;
   logoutPosStaff: () => void;
   posCashierName: string;
@@ -176,6 +178,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
 
   // POS staff auth session
+  const [posPortalIntent, setPosPortalIntent] = useState<'owner' | 'admin'>('owner');
   const [posStaffUser, setPosStaffUser] = useState<PosStaffUser | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.POS_STAFF);
@@ -507,6 +510,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearOnlineCart,
       getOnlineCartTotal,
       posStaffUser,
+      posPortalIntent,
+      setPosPortalIntent,
       loginPosStaff,
       logoutPosStaff,
       posCashierName,
