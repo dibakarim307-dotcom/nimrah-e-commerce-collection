@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { PosStaffUser } from '../types';
+import { googleSignIn, logoutGoogle, initAuth } from '../services/googleAuth';
+import { type User as FirebaseUser } from 'firebase/auth';
 
 interface PosAuthModalProps {
   initialRole?: 'owner' | 'admin';
@@ -38,17 +40,27 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
   const [step, setStep] = useState<'credentials' | 'verify'>('credentials');
   
   // Credentials
-  const [email, setEmail] = useState('nimrahcollection1@gmail.com');
-  const [name, setName] = useState('Nimrah (Proprietor)');
+  const [email, setEmail] = useState('dibakarim307@gmail.com');
+  const [name, setName] = useState('Diba Karim (Shop Owner)');
   const [password, setPassword] = useState('Nimrah@2026');
   const [showPassword, setShowPassword] = useState(false);
   
-  // Verification code stage
+  // Google OAuth / Gmail State
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
+
+  // Custom destination email support
+  const [customDeliveryEmailEnabled, setCustomDeliveryEmailEnabled] = useState(false);
+  const [destinationEmail, setDestinationEmail] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState('');
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+  const [newDestinationEmailInput, setNewDestinationEmailInput] = useState('');
+  
+  // Verification code stage (Code is kept strictly confidential on server)
   const [tempSessionId, setTempSessionId] = useState('');
   const [codeDigits, setCodeDigits] = useState(['', '', '', '', '', '']);
   const [dispatchedEmail, setDispatchedEmail] = useState('');
-  const [receivedEmailCode, setReceivedEmailCode] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
   
   // Status & error handling
   const [isLoading, setIsLoading] = useState(false);
@@ -113,6 +125,48 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  // Google / Gmail Auth state synchronization
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        setGoogleAccessToken(token);
+        if (user.email) {
+          setEmail(user.email);
+          if (user.displayName) setName(user.displayName);
+        }
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleAccessToken(null);
+      }
+    );
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleConnect = async () => {
+    setIsGoogleSigningIn(true);
+    setErrorMessage('');
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setGoogleUser(res.user);
+        setGoogleAccessToken(res.accessToken);
+        if (res.user.email) {
+          setEmail(res.user.email);
+          if (res.user.displayName) setName(res.user.displayName);
+        }
+      }
+    } catch (err: any) {
+      console.error('Google Sign In error:', err);
+      setErrorMessage(err?.message || 'Failed to authenticate with Google');
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  };
+
   const handleSelectPreset = (p: typeof ownerPresets[0] | typeof adminPresets[0]) => {
     setEmail(p.email);
     setName(p.name);
@@ -135,15 +189,22 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
       const response = await fetch('/api/pos/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name, password })
+        body: JSON.stringify({ 
+          email, 
+          destinationEmail: (customDeliveryEmailEnabled && destinationEmail.trim()) ? destinationEmail.trim() : email,
+          name, 
+          password,
+          requestedRole: portalMode,
+          gmailToken: googleAccessToken || undefined
+        })
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
         setTempSessionId(data.tempSessionId);
-        setDispatchedEmail(data.email);
-        setReceivedEmailCode(data.verificationCode);
+        setDispatchedEmail(data.destinationEmail || data.email);
+        setDeliveryMethod(data.deliveryMethod || 'Email Dispatched');
         setStep('verify');
         setResendCooldown(45);
       } else {
@@ -152,6 +213,38 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
     } catch (err) {
       console.error('POS login network error:', err);
       setErrorMessage('Could not connect to authentication server. Please retry.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChangeDestinationEmail = async () => {
+    if (!newDestinationEmailInput.trim() || !tempSessionId) return;
+    setIsLoading(true);
+    setErrorMessage('');
+
+    try {
+      const response = await fetch('/api/pos/auth/change-otp-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tempSessionId,
+          newDestinationEmail: newDestinationEmailInput.trim()
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setDispatchedEmail(data.destinationEmail);
+        setDeliveryMethod(data.deliveryMethod || 'Email Sent');
+        setIsChangingEmail(false);
+        setNewDestinationEmailInput('');
+        setResendCooldown(45);
+      } else {
+        setErrorMessage(data.message || 'Failed to re-route OTP code.');
+      }
+    } catch {
+      setErrorMessage('Network error while re-routing OTP.');
     } finally {
       setIsLoading(false);
     }
@@ -182,12 +275,6 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
     if (e.key === 'Backspace' && !codeDigits[index] && index > 0) {
       const prevInput = document.getElementById(`otp-input-${index - 1}`);
       prevInput?.focus();
-    }
-  };
-
-  const handleAutoFillCode = () => {
-    if (receivedEmailCode) {
-      setCodeDigits(receivedEmailCode.split(''));
     }
   };
 
@@ -239,7 +326,6 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
 
       const data = await response.json();
       if (response.ok && data.success) {
-        setReceivedEmailCode(data.verificationCode);
         setResendCooldown(45);
       } else {
         setErrorMessage(data.message || 'Failed to resend verification code.');
@@ -405,6 +491,48 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
               </div>
             </div>
 
+            {/* Option to send OTP to any custom email account */}
+            <div className="pt-1 pb-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300 hover:text-white select-none">
+                <input
+                  type="checkbox"
+                  checked={customDeliveryEmailEnabled}
+                  onChange={(e) => {
+                    setCustomDeliveryEmailEnabled(e.target.checked);
+                    if (e.target.checked && !destinationEmail) {
+                      setDestinationEmail(email);
+                    }
+                  }}
+                  className="rounded border-stone-700 bg-[#16161c] text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4"
+                />
+                <span className="font-medium text-[11px] text-amber-200">
+                  Send OTP to a separate personal/destination email account
+                </span>
+              </label>
+
+              {customDeliveryEmailEnabled && (
+                <div className="mt-2.5 p-3 rounded-xl bg-[#14141d] border border-amber-500/40 space-y-1 animate-in fade-in">
+                  <label className="block text-[11px] font-mono text-amber-300 font-semibold">
+                    Destination Email Account (Where OTP will be received) *
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-3.5 h-3.5 absolute left-3 top-2.5 text-amber-400" />
+                    <input
+                      type="email"
+                      required={customDeliveryEmailEnabled}
+                      placeholder="e.g. dibakarim307@gmail.com or personal inbox"
+                      value={destinationEmail}
+                      onChange={(e) => setDestinationEmail(e.target.value)}
+                      className="w-full text-xs font-mono pl-9 pr-3 py-2 bg-[#0c0c10] border border-stone-700 rounded-lg text-white placeholder:text-stone-600 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-stone-400">
+                    The 6-digit verification code will be dispatched directly to this inbox.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Quick Presets for Demo & Testing */}
             <div className="pt-1">
               <div className="text-[10px] font-mono uppercase text-stone-500 mb-1.5 flex items-center justify-between">
@@ -433,6 +561,53 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
               </div>
             </div>
 
+            {/* Google Workspace / Gmail Integration Connect Banner */}
+            <div className="p-3 bg-[#13131c] rounded-2xl border border-stone-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                </svg>
+                <div className="text-xs">
+                  {googleUser ? (
+                    <div>
+                      <div className="text-white font-semibold flex items-center gap-1.5">
+                        <span>Connected to Gmail</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <div className="text-[10px] text-stone-400 font-mono truncate max-w-[200px]">{googleUser.email}</div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-white font-semibold">Connect Official Gmail Account</div>
+                      <div className="text-[10px] text-stone-400">Directly authenticate &amp; dispatch OTPs via Gmail</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {googleUser ? (
+                <button
+                  type="button"
+                  onClick={logoutGoogle}
+                  className="px-2.5 py-1 text-[11px] text-stone-400 hover:text-white bg-stone-800 rounded-lg cursor-pointer"
+                >
+                  Disconnect
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGoogleConnect}
+                  disabled={isGoogleSigningIn}
+                  className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-white text-stone-900 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isGoogleSigningIn ? 'Connecting...' : 'Sign in with Google'}
+                </button>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -443,7 +618,7 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
               } disabled:opacity-50`}
             >
               <KeyRound className="w-4 h-4" />
-              <span>{isLoading ? 'Verifying Identity...' : `Sign In as ${portalMode === 'owner' ? 'Shop Owner' : 'Admin'} & Request Code`}</span>
+              <span>{isLoading ? 'Sending Security Code...' : `Send OTP to Email Account & Authorize`}</span>
             </button>
           </form>
         )}
@@ -451,50 +626,80 @@ export const PosAuthModal: React.FC<PosAuthModalProps> = ({
         {/* STEP 2: EMAIL VERIFICATION CODE (OTP) */}
         {step === 'verify' && (
           <form onSubmit={handleVerifyOtp} className="space-y-5">
-            {/* Simulation Notification Preview of the incoming email */}
-            <div className="bg-gradient-to-r from-emerald-950/80 via-emerald-900/60 to-black p-4 rounded-2xl border border-emerald-500/40 space-y-2 shadow-lg">
-              <div className="flex items-center justify-between text-[11px] font-mono text-emerald-300">
-                <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Incoming Security Email</span>
+            {/* Real Email Dispatch Delivery Card */}
+            <div className="bg-[#14141d] p-4 sm:p-5 rounded-2xl border border-amber-500/40 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between text-[11px] font-mono text-amber-300">
+                <span className="flex items-center gap-1.5 font-bold">
+                  <Mail className="w-4 h-4 text-amber-400" />
+                  <span>Security OTP Code Dispatched</span>
                 </span>
-                <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-bold">
-                  SENT
+                <span className="bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded font-mono text-[10px] uppercase font-bold border border-amber-400/40">
+                  {deliveryMethod || 'Email Sent'}
                 </span>
               </div>
 
               <div className="text-xs text-stone-200">
-                To: <strong className="text-white font-mono">{dispatchedEmail}</strong>
+                Recipient Email Account: <strong className="text-white font-mono">{dispatchedEmail}</strong>
               </div>
-              <div className="text-[11px] text-stone-300 italic">
-                "Your Nimrah Collection POS One-Time Code is: <strong className="font-mono text-amber-300 text-sm">{receivedEmailCode}</strong>"
+              <p className="text-[11px] text-stone-400 leading-relaxed font-light">
+                Please check your email inbox (and Spam/Junk folder) for the message titled: <strong className="text-stone-300 font-mono">[Nimrah Collection POS] Security Verification Code</strong>.
+              </p>
+
+              {/* Action shortcuts */}
+              <div className="pt-1 flex flex-wrap items-center gap-2">
+                <a
+                  href="https://mail.google.com/mail/u/0/#search/Nimrah+Collection+POS"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-stone-950 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5 shadow-md shadow-amber-950/40 cursor-pointer"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Open Gmail Inbox ↗</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setIsChangingEmail(!isChangingEmail)}
+                  className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs rounded-xl border border-stone-700 transition-colors cursor-pointer"
+                >
+                  {isChangingEmail ? 'Cancel' : 'Send to another email account'}
+                </button>
               </div>
 
-              {receivedEmailCode && (
-                <div className="pt-1 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAutoFillCode}
-                    className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-stone-950 text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
-                  >
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>Auto-Fill {receivedEmailCode}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(receivedEmailCode);
-                      setCopiedCode(true);
-                      setTimeout(() => setCopiedCode(false), 2000);
-                    }}
-                    className="px-2.5 py-1 bg-black/40 hover:bg-black/60 text-emerald-200 text-[11px] rounded-lg border border-emerald-500/30 flex items-center gap-1"
-                  >
-                    {copiedCode ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedCode ? 'Copied' : 'Copy'}</span>
-                  </button>
+              {/* Inline Change Email Account Drawer */}
+              {isChangingEmail && (
+                <div className="p-3 bg-stone-900 border border-stone-700 rounded-xl space-y-2 text-xs animate-in fade-in">
+                  <label className="block text-stone-300 font-mono text-[11px]">
+                    Enter new recipient email address:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={newDestinationEmailInput}
+                      onChange={(e) => setNewDestinationEmailInput(e.target.value)}
+                      placeholder="e.g. dibakarim307@gmail.com"
+                      className="flex-1 bg-stone-950 border border-stone-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-amber-400 outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={isLoading || !newDestinationEmailInput.trim()}
+                      onClick={handleChangeDestinationEmail}
+                      className="px-3 py-1.5 bg-amber-400 disabled:opacity-50 text-stone-950 font-bold rounded-lg text-xs hover:bg-amber-300 cursor-pointer"
+                    >
+                      Resend
+                    </button>
+                  </div>
                 </div>
               )}
+
+              {/* Confidential Security Guarantee */}
+              <div className="pt-2 border-t border-stone-800/80 flex items-center justify-between text-[11px] text-stone-400">
+                <div className="flex items-center gap-1.5 text-amber-400">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="font-mono text-[10px] text-amber-300">Confidentiality Enforced: OTP sent exclusively to email account</span>
+                </div>
+                <span className="text-[10px] font-mono text-stone-500">Single-Use (10m)</span>
+              </div>
             </div>
 
             {/* 6-box OTP Input */}

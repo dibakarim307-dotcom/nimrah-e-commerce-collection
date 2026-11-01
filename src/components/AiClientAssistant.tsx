@@ -54,7 +54,8 @@ export const AiClientAssistant: React.FC<AiClientAssistantProps> = ({ isOpen, on
     { label: "📍 Eastleigh boutique location & hours", query: "Where exactly is your shop located in Eastleigh and what are your opening hours?" },
     { label: "💳 How to pay via M-Pesa Till 5428901", query: "How do I pay using your M-Pesa Till number 5428901?" },
     { label: "✨ Tell me about Nimrah Noir perfume", query: "What are the fragrance notes and sillage of Nimrah Noir extrait de parfum?" },
-    { label: "📦 How do I track my active order?", query: "How can I track the delivery status of my Nimrah Collection order?" }
+    { label: "📦 How do I track my active order?", query: "How can I track the delivery status of my Nimrah Collection order?" },
+    {label:"ask any question regarding our e-commerce", query:"how can i visit your  whatsapp page"}
   ];
 
   const handleSendMessage = async (textToSend: string) => {

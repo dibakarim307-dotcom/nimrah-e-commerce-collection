@@ -3,7 +3,7 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-    color: #f5f5f4;
+    color: #484814;
     background-color: #0b0b0e;
     -webkit-font-smoothing: antialiased;
   }
@@ -43,7 +43,7 @@
 
 /* Luxury gold text gradient helper */
 .text-gold-gradient {
-  background: linear-gradient(135deg, #fce588 0%, #d4af37 50%, #aa771c 100%);
+  background: linear-gradient(135deg, #978335 0%, #e1d8b7 50%, #0b0905 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
