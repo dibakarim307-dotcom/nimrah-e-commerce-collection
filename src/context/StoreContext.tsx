@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   Product, 
   CartItem, 
@@ -6,12 +6,14 @@ import {
   StoreSettings, 
   HeldCart, 
   OrderStatus,
-  PosStaffUser
+  PosStaffUser,
+  ShowcaseSlide
 } from '../types';
 import { 
   INITIAL_PRODUCTS, 
   INITIAL_ORDERS, 
-  DEFAULT_STORE_SETTINGS 
+  DEFAULT_STORE_SETTINGS,
+  DEFAULT_SHOWCASE_SLIDES 
 } from '../data/initialData';
 
 interface StoreContextType {
@@ -81,38 +83,83 @@ interface StoreContextType {
   deleteProduct: (productId: string) => void;
   updateSettings: (newSettings: StoreSettings) => void;
   openInvoice: (order: Order) => void;
+  clearAllOrders: () => void;
+
+  // Shop Owner Product Management Global Controls
+  isOwnerProductModalOpen: boolean;
+  setIsOwnerProductModalOpen: (open: boolean) => void;
+  ownerModalInitialMode: 'add' | 'delete' | 'inventory';
+  setOwnerModalInitialMode: (mode: 'add' | 'delete' | 'inventory') => void;
+  productForDeletion: Product | null;
+  setProductForDeletion: (product: Product | null) => void;
+  openAddProductModal: () => void;
+  openDeleteProductModal: (product?: Product | null) => void;
+  isShopOwner: boolean;
+
+  // Storefront Animation Showcase Display
+  showcaseSlides: ShowcaseSlide[];
+  updateShowcaseSlides: (slides: ShowcaseSlide[]) => Promise<boolean>;
+  isOwnerShowcaseModalOpen: boolean;
+  setIsOwnerShowcaseModalOpen: (open: boolean) => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
   PRODUCTS: 'nimrah_products_v1',
-  ORDERS: 'nimrah_orders_v1',
+  DELETED_PRODUCTS: 'nimrah_deleted_products_v1',
+  ORDERS: 'nimrah_orders_real_v2',
   SETTINGS: 'nimrah_settings_v1',
   ONLINE_CART: 'nimrah_online_cart_v1',
   POS_CART: 'nimrah_pos_cart_v1',
   HELD_CARTS: 'nimrah_held_carts_v1',
-  POS_STAFF: 'nimrah_pos_staff_v1'
+  POS_STAFF: 'nimrah_pos_staff_v1',
+  SHOWCASE_SLIDES: 'nimrah_showcase_slides_v1'
 };
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load products
+  // Track permanently deleted products persisted in localStorage so sync never resurrects them
+  const deletedProductIds = useRef<Set<string>>((() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.DELETED_PRODUCTS);
+      return stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  })());
+
+  // Load products (strictly excluding any deleted items)
   const [products, setProducts] = useState<Product[]>(() => {
     try {
+      const deletedStored = localStorage.getItem(STORAGE_KEYS.DELETED_PRODUCTS);
+      const deletedSet = deletedStored ? new Set<string>(JSON.parse(deletedStored)) : new Set<string>();
       const stored = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      return stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+      const initial: Product[] = stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
+      return initial.filter(p => !deletedSet.has(p.id));
     } catch {
       return INITIAL_PRODUCTS;
     }
   });
 
-  // Load orders
+  // Load orders (pristine empty space strictly reserved for real incoming orders)
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
+      // Clear any legacy mock order storage
+      localStorage.removeItem('nimrah_orders_v1');
       const stored = localStorage.getItem(STORAGE_KEYS.ORDERS);
-      return stored ? JSON.parse(stored) : INITIAL_ORDERS;
+      if (stored) {
+        const parsed: Order[] = JSON.parse(stored);
+        // Exclude any dummy orders
+        return parsed.filter(o => 
+          o.customer?.name !== 'Amina Hassan' && 
+          o.customer?.name !== 'Zainab Omar' &&
+          o.id !== 'NC-2026-7841' &&
+          o.id !== 'NC-2026-7840'
+        );
+      }
+      return [];
     } catch {
-      return INITIAL_ORDERS;
+      return [];
     }
   });
 
@@ -177,16 +224,66 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
 
+  // Storefront Animation Showcase Slides
+  const [showcaseSlides, setShowcaseSlides] = useState<ShowcaseSlide[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.SHOWCASE_SLIDES);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return DEFAULT_SHOWCASE_SLIDES;
+    } catch {
+      return DEFAULT_SHOWCASE_SLIDES;
+    }
+  });
+  const [isOwnerShowcaseModalOpen, setIsOwnerShowcaseModalOpen] = useState(false);
+
+  const DEFAULT_SHOP_OWNER: PosStaffUser = {
+    id: "staff-owner-001",
+    name: "Diba Karim (Shop Owner)",
+    email: "dibakarim307@gmail.com",
+    role: "Shop Owner",
+    branch: "Eastleigh Luxury Boutique G7",
+    badgeNumber: "OWN-001"
+  };
+
   // POS staff auth session
   const [posPortalIntent, setPosPortalIntent] = useState<'owner' | 'admin'>('owner');
   const [posStaffUser, setPosStaffUser] = useState<PosStaffUser | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.POS_STAFF);
-      return stored ? JSON.parse(stored) : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.email) return parsed;
+      }
+      localStorage.setItem(STORAGE_KEYS.POS_STAFF, JSON.stringify(DEFAULT_SHOP_OWNER));
+      return DEFAULT_SHOP_OWNER;
     } catch {
-      return null;
+      return DEFAULT_SHOP_OWNER;
     }
   });
+
+  // Shop Owner Product Management Global Modal State
+  const [isOwnerProductModalOpen, setIsOwnerProductModalOpen] = useState(false);
+  const [ownerModalInitialMode, setOwnerModalInitialMode] = useState<'add' | 'delete' | 'inventory'>('add');
+  const [productForDeletion, setProductForDeletion] = useState<Product | null>(null);
+
+  const openAddProductModal = () => {
+    setProductForDeletion(null);
+    setOwnerModalInitialMode('add');
+    setIsOwnerProductModalOpen(true);
+  };
+
+  const openDeleteProductModal = (product?: Product | null) => {
+    if (product) {
+      setProductForDeletion(product);
+    }
+    setOwnerModalInitialMode('delete');
+    setIsOwnerProductModalOpen(true);
+  };
+
+  const isShopOwner = posStaffUser?.role === 'Shop Owner';
 
   const loginPosStaff = (user: PosStaffUser) => {
     setPosStaffUser(user);
@@ -212,6 +309,73 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
   }, [products]);
+
+  // Synchronize live catalog with server & cross-tab broadcast channel
+  // Authoritative server sync: deleted products never resurrect
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchLiveProducts = async () => {
+      try {
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.products) && isMounted) {
+            // Strictly exclude any locally or server marked deleted products
+            const activeServerProducts = data.products.filter(
+              (p: Product) => !deletedProductIds.current.has(p.id)
+            );
+            setProducts(activeServerProducts);
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(activeServerProducts));
+          }
+        }
+      } catch (err) {
+        // Fallback to local storage if offline
+      }
+    };
+
+    fetchLiveProducts();
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel('nimrah_products_channel');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'SYNC_PRODUCTS' && Array.isArray(event.data?.products)) {
+          const active = event.data.products.filter(
+            (p: Product) => !deletedProductIds.current.has(p.id)
+          );
+          setProducts(active);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(active));
+        }
+      };
+    }
+
+    // Auto-refresh every 3.5s to catch new owner uploads across devices
+    const interval = setInterval(fetchLiveProducts, 3500);
+
+    const onFocus = () => fetchLiveProducts();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      if (channel) channel.close();
+    };
+  }, []);
+
+  // Fetch live showcase slides from server on mount
+  useEffect(() => {
+    fetch('/api/showcase')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.success && Array.isArray(data.slides) && data.slides.length > 0) {
+          setShowcaseSlides(data.slides);
+          localStorage.setItem(STORAGE_KEYS.SHOWCASE_SLIDES, JSON.stringify(data.slides));
+        }
+      })
+      .catch(err => console.error('Error fetching showcase slides:', err));
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
@@ -414,10 +578,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const prodIndex = updated.findIndex(p => p.id === cartItem.productId);
         if (prodIndex > -1) {
           const currentStock = updated[prodIndex].stock;
+          const newStock = Math.max(0, currentStock - cartItem.quantity);
           updated[prodIndex] = {
             ...updated[prodIndex],
-            stock: Math.max(0, currentStock - cartItem.quantity)
+            stock: newStock
           };
+
+          // Synchronize stock deduction with server
+          fetch(`/api/products/${cartItem.productId}/stock`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stock: newStock })
+          }).catch(err => console.error('Failed to update stock after order:', err));
         }
       });
       return updated;
@@ -451,22 +623,175 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateProductStock = (productId: string, newStock: number) => {
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, stock: Math.max(0, newStock) } : p));
+    const finalStock = Math.max(0, newStock);
+    setProducts(prev => prev.map(p => p.id === productId ? { ...p, stock: finalStock } : p));
+
+    fetch(`/api/products/${productId}/stock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stock: finalStock })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(data.products));
+          if (typeof BroadcastChannel !== 'undefined') {
+            const ch = new BroadcastChannel('nimrah_products_channel');
+            ch.postMessage({ type: 'SYNC_PRODUCTS', products: data.products });
+            ch.close();
+          }
+        }
+      })
+      .catch(err => console.error('Failed to sync stock to server:', err));
   };
 
   const addProduct = (product: Omit<Product, 'id'>): Product => {
+    if (!isShopOwner) {
+      console.error('[SECURITY] Unauthorized: Only the Shop Owner is authorized to add products.');
+      throw new Error('Unauthorized: Only Shop Owner can add products.');
+    }
+
     const newId = `prod-${Date.now().toString().slice(-6)}`;
     const newProduct: Product = { ...product, id: newId };
-    setProducts(prev => [newProduct, ...prev]);
+    
+    // In case this ID was previously marked deleted, unmark it since the owner explicitly recreated it
+    if (deletedProductIds.current.has(newId)) {
+      deletedProductIds.current.delete(newId);
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.DELETED_PRODUCTS,
+          JSON.stringify(Array.from(deletedProductIds.current))
+        );
+      } catch {}
+    }
+
+    // Immediate optimistic local update so POS and UI respond instantly
+    setProducts(prev => [newProduct, ...prev.filter(p => p.id !== newId)]);
+
+    // Send to server with Shop Owner authorization headers
+    const staffRole = posStaffUser?.role || 'Shop Owner';
+    const staffEmail = posStaffUser?.email || 'dibakarim307@gmail.com';
+
+    fetch('/api/products', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-staff-role': staffRole,
+        'x-staff-email': staffEmail
+      },
+      body: JSON.stringify({
+        product: newProduct,
+        staffRole,
+        staffEmail
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.products)) {
+          const filtered = data.products.filter((p: Product) => !deletedProductIds.current.has(p.id));
+          setProducts(filtered);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(filtered));
+          if (typeof BroadcastChannel !== 'undefined') {
+            const ch = new BroadcastChannel('nimrah_products_channel');
+            ch.postMessage({ type: 'SYNC_PRODUCTS', products: filtered });
+            ch.close();
+          }
+        }
+      })
+      .catch(err => console.error('Failed to save uploaded product to server:', err));
+
     return newProduct;
   };
 
   const updateProduct = (updatedProduct: Product) => {
+    if (!isShopOwner) {
+      console.error('[SECURITY] Unauthorized: Only the Shop Owner is authorized to modify products.');
+      return;
+    }
+
     setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+
+    const staffRole = posStaffUser?.role || 'Shop Owner';
+    const staffEmail = posStaffUser?.email || 'dibakarim307@gmail.com';
+
+    fetch(`/api/products/${updatedProduct.id}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-staff-role': staffRole,
+        'x-staff-email': staffEmail
+      },
+      body: JSON.stringify({
+        product: updatedProduct,
+        staffRole,
+        staffEmail
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.products)) {
+          setProducts(data.products);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(data.products));
+          if (typeof BroadcastChannel !== 'undefined') {
+            const ch = new BroadcastChannel('nimrah_products_channel');
+            ch.postMessage({ type: 'SYNC_PRODUCTS', products: data.products });
+            ch.close();
+          }
+        }
+      })
+      .catch(err => console.error('Failed to update product on server:', err));
   };
 
   const deleteProduct = (productId: string) => {
-    setProducts(prev => prev.filter(p => p.id !== productId));
+    if (!isShopOwner) {
+      console.error('[SECURITY] Unauthorized: Only the Shop Owner is authorized to delete products.');
+      return;
+    }
+
+    // Permanently record in memory and localStorage so it can NEVER resurrect
+    deletedProductIds.current.add(productId);
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.DELETED_PRODUCTS,
+        JSON.stringify(Array.from(deletedProductIds.current))
+      );
+    } catch (e) {
+      console.error('Failed to persist deletedProductIds', e);
+    }
+
+    // Immediately remove from current state
+    setProducts(prev => {
+      const remaining = prev.filter(p => p.id !== productId);
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(remaining));
+      return remaining;
+    });
+
+    const staffRole = posStaffUser?.role || 'Shop Owner';
+    const staffEmail = posStaffUser?.email || 'dibakarim307@gmail.com';
+
+    fetch(`/api/products/${productId}?staffRole=${encodeURIComponent(staffRole)}&staffEmail=${encodeURIComponent(staffEmail)}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-staff-role': staffRole,
+        'x-staff-email': staffEmail
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.products)) {
+          const filtered = data.products.filter((p: Product) => !deletedProductIds.current.has(p.id));
+          setProducts(filtered);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(filtered));
+          if (typeof BroadcastChannel !== 'undefined') {
+            const ch = new BroadcastChannel('nimrah_products_channel');
+            ch.postMessage({ type: 'SYNC_PRODUCTS', products: filtered });
+            ch.close();
+          }
+        }
+      })
+      .catch(err => console.error('Failed to delete product on server:', err));
   };
 
   const updateSettings = (newSettings: StoreSettings) => {
@@ -476,6 +801,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const openInvoice = (order: Order) => {
     setSelectedOrderForInvoice(order);
     setIsInvoiceModalOpen(true);
+  };
+
+  const clearAllOrders = () => {
+    setOrders([]);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.ORDERS);
+      localStorage.removeItem('nimrah_orders_v1');
+    } catch {}
   };
 
   return (
@@ -537,7 +870,44 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       updateProduct,
       deleteProduct,
       updateSettings,
-      openInvoice
+      openInvoice,
+      clearAllOrders,
+      isOwnerProductModalOpen,
+      setIsOwnerProductModalOpen,
+      ownerModalInitialMode,
+      setOwnerModalInitialMode,
+      productForDeletion,
+      setProductForDeletion,
+      openAddProductModal,
+      openDeleteProductModal,
+      isShopOwner,
+      showcaseSlides,
+      updateShowcaseSlides: async (slides: ShowcaseSlide[]): Promise<boolean> => {
+        try {
+          setShowcaseSlides(slides);
+          localStorage.setItem(STORAGE_KEYS.SHOWCASE_SLIDES, JSON.stringify(slides));
+          const res = await fetch('/api/showcase', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'x-staff-role': posStaffUser?.role || 'Shop Owner',
+              'x-staff-email': posStaffUser?.email || 'dibakarim307@gmail.com'
+            },
+            body: JSON.stringify({ 
+              slides,
+              staffRole: posStaffUser?.role || 'Shop Owner',
+              staffEmail: posStaffUser?.email || 'dibakarim307@gmail.com'
+            })
+          });
+          const data = await res.json();
+          return data?.success === true;
+        } catch (err) {
+          console.error('Failed to sync showcase slides to server:', err);
+          return false;
+        }
+      },
+      isOwnerShowcaseModalOpen,
+      setIsOwnerShowcaseModalOpen
     }}>
       {children}
     </StoreContext.Provider>

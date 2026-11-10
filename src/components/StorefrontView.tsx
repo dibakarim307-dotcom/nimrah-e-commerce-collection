@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { HeroBanner } from './HeroBanner';
 import { ProductCard } from './ProductCard';
+import { AtelierShowcaseDisplay } from './AtelierShowcaseDisplay';
 import { useStore } from '../context/StoreContext';
 import { ProductCategory } from '../types';
 import { cleanPhoneNumber } from '../utils/whatsapp';
@@ -220,7 +221,7 @@ export const StorefrontView: React.FC<StorefrontViewProps> = ({ searchQuery, onS
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-7">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
@@ -232,27 +233,8 @@ export const StorefrontView: React.FC<StorefrontViewProps> = ({ searchQuery, onS
       <section className="bg-[#101015] border-y border-amber-500/20 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-            {/* Visual presentation */}
-            <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-stone-900 border border-amber-500/30 shadow-2xl">
-              <img 
-                src="/src/assets/images/product_artisan_kaftan_1793448136736.jpg" 
-                alt="Nimrah Collection Atelier Craftsmanship"
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover brightness-90"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-              <div className="absolute bottom-6 left-6 right-6 text-white space-y-1">
-                <span className="text-[10px] font-mono uppercase tracking-widest text-amber-300 block">
-                  Atelier Heritage · Shop G7
-                </span>
-                <h3 className="font-serif text-xl sm:text-2xl font-medium text-amber-100">
-                  Precision Craftsmanship &amp; Pure Silk Velvet
-                </h3>
-                <p className="text-xs text-stone-300 font-light">
-                  Hand-embroidered zardozi and crystalline beadwork tailored with modesty.
-                </p>
-              </div>
-            </div>
+            {/* Visual presentation: Animated Atelier Showcase Display with Owner Configuration */}
+            <AtelierShowcaseDisplay />
 
             {/* Prose */}
             <div className="space-y-6 lg:pl-6">
@@ -427,20 +409,14 @@ export const StorefrontView: React.FC<StorefrontViewProps> = ({ searchQuery, onS
                   onClick={() => setActiveView('pos')} 
                   className="block text-stone-300 hover:text-white transition-colors"
                 >
-                  → In-Store POS Register
+                  → Staff POS Terminal (Eastleigh G7)
                 </button>
-                <button 
-                  onClick={() => setActiveView('inventory')} 
-                  className="block text-stone-300 hover:text-white transition-colors"
-                >
-                  → Live Inventory Sync
-                </button>
-                <button 
-                  onClick={() => setActiveView('orders')} 
-                  className="block text-stone-300 hover:text-white transition-colors"
-                >
-                  → Automatic Tax Invoices
-                </button>
+                <div className="text-stone-400 font-mono text-[11px]">
+                  → Lipa na M-Pesa Till {settings.mpesaTillNumber}
+                </div>
+                <div className="text-stone-400 font-mono text-[11px]">
+                  → Official eTIMS KRA Tax Compliant
+                </div>
               </div>
             </div>
           </div>

@@ -226,6 +226,24 @@ export const InvoiceModal: React.FC = () => {
                           </button>
                         </div>
                       </div>
+                      {order.payment.mpesaDetails.clientRealName && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-stone-600">M-Pesa Verified Client:</span>
+                          <span className="font-semibold text-stone-900">
+                            {order.payment.mpesaDetails.clientRealName}
+                          </span>
+                        </div>
+                      )}
+                      {order.payment.mpesaDetails.message && (
+                        <div className="p-2.5 bg-emerald-50/80 rounded-lg border border-emerald-300 font-mono text-[11px] text-emerald-950 space-y-1">
+                          <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                            Safaricom M-Pesa Official Confirmation SMS:
+                          </span>
+                          <p className="leading-snug">
+                            {order.payment.mpesaDetails.message}
+                          </p>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -430,6 +448,17 @@ export const InvoiceModal: React.FC = () => {
                       <span>M-PESA REF:</span>
                       <span className="font-bold">{order.payment.mpesaDetails.transactionCode}</span>
                     </div>
+                    {order.payment.mpesaDetails.clientRealName && (
+                      <div className="flex justify-between">
+                        <span>CLIENT:</span>
+                        <span className="font-bold">{order.payment.mpesaDetails.clientRealName}</span>
+                      </div>
+                    )}
+                    {order.payment.mpesaDetails.message && (
+                      <div className="text-[9px] pt-1 text-stone-700 leading-tight border-t border-dashed border-stone-300">
+                        SMS: {order.payment.mpesaDetails.message}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

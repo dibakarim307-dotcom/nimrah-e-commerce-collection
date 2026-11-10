@@ -1,0 +1,30 @@
+[
+  {
+    "id": "slide-1",
+    "imageUrl": "/src/assets/images/product_artisan_kaftan_1793448136736.jpg",
+    "title": "Precision Craftsmanship & Pure Silk Velvet",
+    "subtitle": "Hand-embroidered zardozi and crystalline beadwork tailored with modesty.",
+    "badge": "Atelier Heritage · Shop G7"
+  },
+  {
+    "id": "slide-2",
+    "imageUrl": "/src/assets/images/hero_nimrah_collection_1793448134362.jpg",
+    "title": "Haute Couture Modesty & Royal Drapes",
+    "subtitle": "Tailored in rich French velvets, pure Moroccan crepes, and spun raw silks.",
+    "badge": "Boutique Showcase"
+  },
+  {
+    "id": "slide-3",
+    "imageUrl": "/src/assets/images/product_signature_perfume_1793448136885.jpg",
+    "title": "Nimrah Noir Extrait de Parfum",
+    "subtitle": "35% concentrated pure Cambodian oud, Bulgarian rose & Tahitian vanilla.",
+    "badge": "Haute Parfumerie"
+  },
+  {
+    "id": "slide-4",
+    "imageUrl": "/src/assets/images/product_emerald_abaya_1793448135180.jpg",
+    "title": "Royal Emerald Velvet Collection",
+    "subtitle": "Exclusive evening modest silhouette with hand-embellished sleeves.",
+    "badge": "New Atelier Arrival"
+  }
+]

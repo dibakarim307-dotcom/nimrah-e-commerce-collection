@@ -23,7 +23,10 @@ interface ProductDetailModalProps {
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClose }) => {
-  const { settings, addToOnlineCart } = useStore();
+  const { 
+    settings, 
+    addToOnlineCart
+  } = useStore();
 
   const isPerfume = product.category === 'Signature Fragrance' || product.id === 'prod-04';
   const [selectedSize, setSelectedSize] = useState<string>(product.sizes[0] || 'Standard');
@@ -333,6 +336,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 <span>·</span>
                 <span>M-Pesa Till: {settings.mpesaTillNumber}</span>
               </div>
+
             </div>
           </div>
         </div>

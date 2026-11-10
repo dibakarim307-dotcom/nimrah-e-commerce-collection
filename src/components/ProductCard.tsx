@@ -14,7 +14,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { 
     settings, 
     addToOnlineCart, 
-    setSelectedProductForModal 
+    setSelectedProductForModal
   } = useStore();
 
   const [imageError, setImageError] = useState(false);
@@ -85,14 +85,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           ) : null}
         </div>
 
-        {/* Quick action buttons floating on hover */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+        {/* Quick action buttons floating on hover, visible on touch */}
+        <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 z-10">
           <button 
             onClick={handleWhatsAppInquire}
             title="Ask on WhatsApp"
-            className="p-2 bg-black/90 hover:bg-emerald-950 text-emerald-400 rounded-full shadow-lg transition-colors border border-amber-500/30"
+            className="p-1.5 sm:p-2 bg-black/90 hover:bg-emerald-950 text-emerald-400 rounded-full shadow-lg transition-colors border border-amber-500/30 cursor-pointer"
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button 
             onClick={(e) => {
@@ -100,15 +100,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               setSelectedProductForModal(product);
             }}
             title="Quick View"
-            className="p-2 bg-black/90 hover:bg-stone-900 text-amber-300 rounded-full shadow-lg transition-colors border border-amber-500/30"
+            className="p-1.5 sm:p-2 bg-black/90 hover:bg-stone-900 text-amber-300 rounded-full shadow-lg transition-colors border border-amber-500/30 cursor-pointer"
           >
-            <Eye className="w-4 h-4" />
+            <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
 
-        {/* Subtle quick add button */}
+        {/* Desktop hover quick add button */}
         {!isOutOfStock && (
-          <div className="absolute inset-x-3 bottom-3 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0">
+          <div className="hidden lg:block absolute inset-x-3 bottom-3 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0">
             <button 
               onClick={handleQuickAdd}
               className="w-full py-2.5 px-3 text-xs font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg cursor-pointer"
@@ -121,7 +121,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       {/* Product Metadata */}
-      <div className="p-4 flex flex-col flex-1 justify-between bg-[#121217]">
+      <div className="p-3 sm:p-4 flex flex-col flex-1 justify-between bg-[#121217]">
         <div>
           {/* Category & Collection */}
           <div className="flex items-center gap-2 text-xs text-stone-400 mb-1">
@@ -131,42 +131,56 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
 
           {/* Product Name */}
-          <h3 className="text-sm font-semibold text-white group-hover:text-amber-200 transition-colors line-clamp-1 font-serif">
+          <h3 className="text-xs sm:text-sm font-semibold text-white group-hover:text-amber-200 transition-colors line-clamp-1 font-serif">
             {product.name}
           </h3>
 
           {/* Fabric */}
-          <p className="text-[11px] text-stone-400 mt-1 line-clamp-1 font-light">
+          <p className="text-[10px] sm:text-[11px] text-stone-400 mt-0.5 line-clamp-1 font-light">
             {product.fabric}
           </p>
         </div>
 
-        {/* Price & SKU */}
-        <div className="mt-3 pt-3 border-t border-stone-800/80 flex items-center justify-between">
+        {/* Price, SKU & Mobile 1-Tap Add */}
+        <div className="mt-2.5 pt-2.5 border-t border-stone-800/80 flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="text-sm font-bold font-mono text-amber-300 tabular-nums">
+            <span className="text-xs sm:text-sm font-bold font-mono text-amber-300 tabular-nums">
               {formatCurrency(product.price, settings.currency)}
             </span>
-            <span className="text-[10px] text-stone-500 font-mono">
+            <span className="text-[9px] sm:text-[10px] text-stone-500 font-mono">
               SKU: {product.sku}
             </span>
           </div>
 
-          {/* Color swatches */}
-          <div className="flex items-center gap-1">
-            {product.colors.slice(0, 3).map((col, idx) => (
-              <span 
-                key={idx}
-                title={col.name}
-                className="w-3.5 h-3.5 rounded-full border border-stone-700 shadow-2xs"
-                style={{ backgroundColor: col.hex }}
-              />
-            ))}
-            {product.colors.length > 3 && (
-              <span className="text-[10px] text-stone-500 font-mono">
-                +{product.colors.length - 3}
-              </span>
+          <div className="flex items-center gap-2">
+            {/* Mobile & Tablet Direct Add Button */}
+            {!isOutOfStock && (
+              <button
+                type="button"
+                onClick={handleQuickAdd}
+                className="lg:hidden px-2.5 py-1 text-[11px] font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-lg flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-sm"
+              >
+                <ShoppingBag className="w-3 h-3" />
+                <span>{isAdding ? 'Added!' : '+ Add'}</span>
+              </button>
             )}
+
+            {/* Color swatches */}
+            <div className="hidden sm:flex items-center gap-1">
+              {product.colors.slice(0, 3).map((col, idx) => (
+                <span 
+                  key={idx}
+                  title={col.name}
+                  className="w-3.5 h-3.5 rounded-full border border-stone-700 shadow-2xs"
+                  style={{ backgroundColor: col.hex }}
+                />
+              ))}
+              {product.colors.length > 3 && (
+                <span className="text-[10px] text-stone-500 font-mono">
+                  +{product.colors.length - 3}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

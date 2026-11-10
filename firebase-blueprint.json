@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Boutique garment or perfume product available for purchase in store or online",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 200 },
+        "sku": { "type": "string", "maxLength": 100 },
+        "barcode": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 100 },
+        "collection": { "type": "string", "maxLength": 100 },
+        "price": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "lowStockThreshold": { "type": "number" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "fabric": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["name", "price", "stock", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order placed in POS or online storefront",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "enum": ["online", "pos"] },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["confirmed", "processing", "shipped", "delivered", "cancelled"] }
+      },
+      "required": ["total", "status", "source"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of all boutique products displayed online and in the POS"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of all placed orders"
+    }
+  }
+}

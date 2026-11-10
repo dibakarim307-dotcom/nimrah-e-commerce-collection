@@ -16,7 +16,9 @@ import {
   Clock, 
   Percent, 
   HelpCircle,
-  AlertTriangle
+  SlidersHorizontal,
+  Sparkles,
+  Plus
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { formatCurrency } from '../utils/formatters';
@@ -25,12 +27,29 @@ import { Product } from '../types';
 interface OwnerExecutiveHubModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenOrders?: (tab: 'orders' | 'invoices') => void;
+  onOpenInventory?: () => void;
 }
 
-export const OwnerExecutiveHubModal: React.FC<OwnerExecutiveHubModalProps> = ({ isOpen, onClose }) => {
-  const { products, orders, settings, updateProduct, updateSettings, posStaffUser } = useStore();
+export const OwnerExecutiveHubModal: React.FC<OwnerExecutiveHubModalProps> = ({ 
+  isOpen, 
+  onClose,
+  onOpenOrders,
+  onOpenInventory
+}) => {
+  const { 
+    products, 
+    orders, 
+    settings, 
+    updateProduct, 
+    updateSettings, 
+    posStaffUser, 
+    setIsSettingsModalOpen,
+    showcaseSlides,
+    setIsOwnerShowcaseModalOpen
+  } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'financials' | 'pricing' | 'staff' | 'till_tax'>('financials');
+  const [activeTab, setActiveTab] = useState<'financials' | 'pricing' | 'staff' | 'till_tax' | 'display'>('financials');
   const [editingProducts, setEditingProducts] = useState<Product[]>(products);
   const [savedNotice, setSavedNotice] = useState(false);
 
@@ -185,6 +204,18 @@ export const OwnerExecutiveHubModal: React.FC<OwnerExecutiveHubModalProps> = ({ 
             <CreditCard className="w-3.5 h-3.5" />
             <span>Till 5428901 &amp; KRA Tax Config</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('display')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
+              activeTab === 'display'
+                ? 'bg-amber-400 text-stone-950 font-bold shadow-md'
+                : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Storefront Animation Display</span>
+          </button>
         </div>
 
         {/* Tab Contents */}
@@ -294,6 +325,48 @@ export const OwnerExecutiveHubModal: React.FC<OwnerExecutiveHubModalProps> = ({ 
                     <span>Tax Jurisdiction:</span>
                     <span>Kenya Revenue Authority (ETIMS Ready)</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Direct POS Ledger & Inventory Quick Jump */}
+              <div className="p-4 bg-[#181824] rounded-2xl border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                <div>
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Receipt className="w-4 h-4 text-amber-400" />
+                    <span>Owner POS Operations: Orders, Invoices &amp; Stock</span>
+                  </span>
+                  <p className="text-[11px] text-stone-400 mt-0.5">
+                    Access complete customer transactions, reprint tax invoices, or update live inventory
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenOrders?.('orders');
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-amber-400 hover:bg-amber-300 text-stone-950 rounded-xl transition-colors cursor-pointer"
+                  >
+                    View Orders
+                  </button>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenOrders?.('invoices');
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold bg-stone-900 hover:bg-stone-800 text-amber-300 border border-amber-500/40 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Tax Invoices
+                  </button>
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenInventory?.();
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold bg-stone-900 hover:bg-stone-800 text-stone-200 border border-stone-700 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Inventory
+                  </button>
                 </div>
               </div>
             </div>
@@ -518,8 +591,93 @@ export const OwnerExecutiveHubModal: React.FC<OwnerExecutiveHubModalProps> = ({ 
                   {settingsSavedNotice ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                   <span>{settingsSavedNotice ? 'Settlement Settings Saved!' : 'Update Settlement & Tax Config'}</span>
                 </button>
+
+                <div className="pt-2 border-t border-stone-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      setIsSettingsModalOpen(true);
+                    }}
+                    className="w-full py-2.5 px-3 bg-stone-900 hover:bg-stone-800 border border-amber-500/30 text-amber-300 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+                    <span>Open Full Storefront &amp; M-Pesa Till Configuration</span>
+                  </button>
+                </div>
               </div>
             </form>
+          )}
+
+          {/* TAB 5: STOREFRONT ANIMATION DISPLAY MANAGEMENT */}
+          {activeTab === 'display' && (
+            <div className="space-y-6">
+              <div className="p-4 bg-gradient-to-r from-amber-950/40 via-[#181824] to-amber-950/20 rounded-2xl border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-300">
+                    <Crown className="w-4 h-4 text-amber-400" />
+                    <span>Sovereign Showcase Display Management</span>
+                  </div>
+                  <h3 className="font-serif text-lg font-bold text-white">
+                    Storefront Animated Craftsmanship Exhibition
+                  </h3>
+                  <p className="text-xs text-stone-300 font-light max-w-xl">
+                    Configure the rotating picture slides, headlines, and storytelling that appear on your storefront showcase.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOwnerShowcaseModalOpen(true);
+                  }}
+                  className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg shadow-amber-950/40 cursor-pointer shrink-0 transition-transform active:scale-95"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>Upload &amp; Manage Display Pictures</span>
+                </button>
+              </div>
+
+              {/* Active display pictures gallery */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs text-stone-400 font-mono">
+                  <span>Currently Active Display Pictures ({showcaseSlides.length})</span>
+                  <span>Auto-rotating with smooth Ken-Burns animation</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {showcaseSlides.map((slide, idx) => (
+                    <div 
+                      key={slide.id || idx}
+                      className="bg-[#151520] rounded-2xl border border-stone-800 p-3 space-y-2 hover:border-amber-500/40 transition-colors"
+                    >
+                      <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-black border border-stone-700">
+                        <img 
+                          src={slide.imageUrl} 
+                          alt={slide.title} 
+                          className="w-full h-full object-cover" 
+                        />
+                        <span className="absolute top-1.5 left-1.5 bg-black/80 text-[10px] font-mono px-2 py-0.5 rounded text-amber-300 border border-amber-500/30">
+                          Slide #{idx + 1}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono text-amber-400 block truncate">
+                          {slide.badge || 'Atelier Showcase'}
+                        </span>
+                        <h4 className="text-xs font-serif font-bold text-white truncate" title={slide.title}>
+                          {slide.title}
+                        </h4>
+                        <p className="text-[11px] text-stone-400 line-clamp-2" title={slide.subtitle}>
+                          {slide.subtitle}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
 

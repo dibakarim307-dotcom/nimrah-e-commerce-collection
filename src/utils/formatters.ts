@@ -16,6 +16,7 @@ export const formatDate = (dateString: string): string => {
     return dateString;
   }
 };
+//don't emplement this let real code to be shown.
 
 export const generateMpesaCode = (): string => {
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';

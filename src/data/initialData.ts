@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Order } from '../types';
+import { Product, StoreSettings, Order, ShowcaseSlide } from '../types';
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   storeName: "Nimrah Collection",
@@ -216,95 +216,37 @@ export const INITIAL_PRODUCTS: Product[] = [
   }
 ];
 
-export const INITIAL_ORDERS: Order[] = [
+// Clean orders ledger reserved strictly for real incoming boutique & online orders
+export const INITIAL_ORDERS: Order[] = [];
+
+export const DEFAULT_SHOWCASE_SLIDES: ShowcaseSlide[] = [
   {
-    id: "NC-2026-7841",
-    source: "pos",
-    items: [
-      {
-        productId: "prod-01",
-        product: INITIAL_PRODUCTS[0],
-        selectedSize: "56",
-        selectedColor: INITIAL_PRODUCTS[0].colors[0],
-        quantity: 1,
-        unitPrice: 14500
-      },
-      {
-        productId: "prod-04",
-        product: INITIAL_PRODUCTS[3],
-        selectedSize: "50ml Extrait",
-        selectedColor: INITIAL_PRODUCTS[3].colors[0],
-        quantity: 1,
-        unitPrice: 9500
-      }
-    ],
-    subtotal: 24000,
-    discount: 1000,
-    discountCode: "BOUTIQUE-VIP",
-    tax: 3172.41,
-    shippingFee: 0,
-    total: 23000,
-    customer: {
-      name: "Amina Hassan",
-      phone: "+254 722 890 123",
-      email: "amina.h@outlook.com",
-      city: "Nairobi (In-Store Eastleigh Shop G7)"
-    },
-    payment: {
-      method: "mpesa_till",
-      status: "completed",
-      mpesaDetails: {
-        tillNumber: "5428901",
-        phoneNumber: "254722890123",
-        transactionCode: "QJD82KLA89",
-        merchantName: "NIMRAH COLLECTION",
-        amount: 23000,
-        timestamp: "2026-10-31 11:24 AM"
-      }
-    },
-    status: "confirmed",
-    createdAt: "2026-10-31T11:24:00+03:00",
-    cashierName: "Fatuma K. (Eastleigh G7 Branch)"
+    id: "slide-1",
+    imageUrl: "/src/assets/images/product_artisan_kaftan_1793448136736.jpg",
+    title: "Precision Craftsmanship & Pure Silk Velvet",
+    subtitle: "Hand-embroidered zardozi and crystalline beadwork tailored with modesty.",
+    badge: "Atelier Heritage · Shop G7"
   },
   {
-    id: "NC-2026-7840",
-    source: "online",
-    items: [
-      {
-        productId: "prod-02",
-        product: INITIAL_PRODUCTS[1],
-        selectedSize: "M",
-        selectedColor: INITIAL_PRODUCTS[1].colors[0],
-        quantity: 1,
-        unitPrice: 16800
-      }
-    ],
-    subtotal: 16800,
-    discount: 0,
-    tax: 2317.24,
-    shippingFee: 500,
-    total: 17300,
-    customer: {
-      name: "Zainab Omar",
-      phone: "+254 719 456 789",
-      email: "zainab.omar@gmail.com",
-      address: "House 14, Riverside Drive Villas",
-      city: "Nairobi",
-      notes: "Please call before arrival"
-    },
-    payment: {
-      method: "mpesa_till",
-      status: "completed",
-      mpesaDetails: {
-        tillNumber: "5428901",
-        phoneNumber: "254719456789",
-        transactionCode: "QKD91JMN44",
-        merchantName: "NIMRAH COLLECTION",
-        amount: 17300,
-        timestamp: "2026-10-31 09:45 AM"
-      }
-    },
-    status: "processing",
-    createdAt: "2026-10-31T09:45:00+03:00"
+    id: "slide-2",
+    imageUrl: "/src/assets/images/hero_nimrah_collection_1793448134362.jpg",
+    title: "Haute Couture Modesty & Royal Drapes",
+    subtitle: "Tailored in rich French velvets, pure Moroccan crepes, and spun raw silks.",
+    badge: "Boutique Showcase"
+  },
+  {
+    id: "slide-3",
+    imageUrl: "/src/assets/images/product_signature_perfume_1793448136885.jpg",
+    title: "Nimrah Noir Extrait de Parfum",
+    subtitle: "35% concentrated pure Cambodian oud, Bulgarian rose & Tahitian vanilla.",
+    badge: "Haute Parfumerie"
+  },
+  {
+    id: "slide-4",
+    imageUrl: "/src/assets/images/product_emerald_abaya_1793448135180.jpg",
+    title: "Royal Emerald Velvet Collection",
+    subtitle: "Exclusive evening modest silhouette with hand-embellished sleeves.",
+    badge: "New Atelier Arrival"
   }
 ];
+

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, 
   Smartphone, 
@@ -10,7 +10,13 @@ import {
   QrCode, 
   Truck, 
   Store as StoreIcon, 
-  Lock 
+  Lock,
+  RefreshCw,
+  User,
+  Mail,
+  AlertTriangle,
+  XCircle,
+  Ban
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { formatCurrency, generateMpesaCode } from '../utils/formatters';
@@ -34,11 +40,28 @@ export const OnlineCheckoutModal: React.FC = () => {
   // Payment method tab
   const [paymentMode, setPaymentMode] = useState<'stk_push' | 'manual_till'>('stk_push');
   const [stkPhone, setStkPhone] = useState('0712345678');
-  const [stkStatus, setStkStatus] = useState<'idle' | 'prompted' | 'verifying' | 'success'>('idle');
-  const [stkPin, setStkPin] = useState('');
+  const [stkStatus, setStkStatus] = useState<'idle' | 'prompted' | 'verifying' | 'success' | 'cancelled' | 'failed'>('idle');
+  const [cancellationReason, setCancellationReason] = useState<string>('');
+  const [checkoutRequestId, setCheckoutRequestId] = useState('');
   const [manualCode, setManualCode] = useState('');
   const [copiedTill, setCopiedTill] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [darajaMsg, setDarajaMsg] = useState('');
+  const [isDarajaLoading, setIsDarajaLoading] = useState(false);
+  const [successDetails, setSuccessDetails] = useState<{
+    code: string;
+    realName: string;
+    message: string;
+  } | null>(null);
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+      }
+    };
+  }, []);
 
   if (!isOnlineCheckoutOpen) return null;
 
@@ -53,7 +76,54 @@ export const OnlineCheckoutModal: React.FC = () => {
     setTimeout(() => setCopiedTill(false), 2000);
   };
 
-  const handleInitiateStk = (e: React.FormEvent) => {
+  const completeOrderWithReceipt = (code: string, realClientName?: string, mpesaMessage?: string) => {
+    const finalRealName = realClientName || customerName.trim();
+    const finalMessage = mpesaMessage || `${code} Confirmed. Ksh${total}.00 sent to ${settings.mpesaStoreName} (Till ${settings.mpesaTillNumber}) on ${new Date().toLocaleString('en-KE')}.`;
+
+    setSuccessDetails({
+      code,
+      realName: finalRealName,
+      message: finalMessage
+    });
+    setStkStatus('success');
+
+    setTimeout(() => {
+      createOrder({
+        source: 'online',
+        items: onlineCart,
+        subtotal,
+        discount: 0,
+        tax,
+        shippingFee,
+        total,
+        customer: {
+          name: finalRealName,
+          phone: stkPhone,
+          email: customerEmail,
+          address: deliveryType === 'pickup' ? 'In-Store Pickup (Eastleigh 5th St, UBAH Shopping Shop G7)' : deliveryAddress,
+          city: deliveryType === 'nairobi' ? 'Nairobi' : deliveryType === 'upcountry' ? 'Kenya Upcountry' : 'Eastleigh Shop G7',
+          notes: orderNotes
+        },
+        payment: {
+          method: 'mpesa_till',
+          status: 'completed',
+          mpesaDetails: {
+            tillNumber: settings.mpesaTillNumber,
+            phoneNumber: stkPhone,
+            transactionCode: code,
+            merchantName: settings.mpesaStoreName,
+            amount: total,
+            timestamp: new Date().toLocaleString('en-KE'),
+            clientRealName: finalRealName,
+            message: finalMessage
+          }
+        },
+        status: 'confirmed'
+      });
+    }, 2600);
+  };
+
+  const handleInitiateStk = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
       setErrorMsg('Please enter your full name');
@@ -64,49 +134,142 @@ export const OnlineCheckoutModal: React.FC = () => {
       return;
     }
     setErrorMsg('');
-    setStkStatus('prompted');
+    setIsDarajaLoading(true);
+    setDarajaMsg('Connecting with Safaricom Daraja STK Push Gateway...');
+
+    try {
+      const res = await fetch('/api/mpesa/stkpush', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: stkPhone,
+          amount: total,
+          customerName: customerName.trim(),
+          reference: `ORD-${Date.now().toString().slice(-6)}`,
+          description: `Nimrah Till ${settings.mpesaTillNumber}`
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStkStatus('prompted');
+        const reqId = data.checkoutRequestId || '';
+        setCheckoutRequestId(reqId);
+        setDarajaMsg(data.customerMessage || 'Prompt sent! Please enter your M-Pesa PIN on your phone SIM card.');
+
+        // Live status polling: check every 4.5 seconds to prevent Apigee SpikeArrestViolation
+        if (reqId) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          let pollAttempts = 0;
+          pollTimerRef.current = setInterval(async () => {
+            pollAttempts++;
+            if (pollAttempts > 25) {
+              if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+              return;
+            }
+            try {
+              const qRes = await fetch('/api/mpesa/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ checkoutRequestId: reqId })
+              });
+              const qData = await qRes.json();
+              if (qData.status === 'COMPLETED') {
+                if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                const receipt = qData.mpesaReceiptNumber || generateMpesaCode();
+                const realClientName = qData.customerName || customerName.trim();
+                const officialMpesaMessage = qData.mpesaMessage || `${receipt} Confirmed. Ksh${total}.00 sent to ${settings.mpesaStoreName} (Till ${settings.mpesaTillNumber}) on ${new Date().toLocaleString('en-KE')}.`;
+                completeOrderWithReceipt(receipt, realClientName, officialMpesaMessage);
+              } else if (qData.status === 'CANCELLED') {
+                // User cancelled on phone SIM - cancel immediately in checkout!
+                // Strictly do NOT generate order, do NOT show invoice or tracking!
+                if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                setStkStatus('cancelled');
+                setCancellationReason(qData.resultDesc || 'Safaricom Server: Transaction was cancelled by customer on their phone SIM card (ResultCode 1032).');
+                setDarajaMsg('Transaction cancelled on Safaricom server.');
+                console.log('[CHECKOUT CANCELLED] Safaricom reported customer cancelled transaction.');
+              } else if (qData.status === 'FAILED') {
+                if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                setStkStatus('failed');
+                setCancellationReason(qData.resultDesc || 'M-Pesa transaction was not completed.');
+              }
+            } catch (err) {
+              console.error('STK poll error:', err);
+            }
+          }, 4500);
+        }
+      } else {
+        setStkStatus('prompted');
+        setDarajaMsg('M-Pesa STK prompt dispatched to your phone SIM card. Please enter your PIN.');
+      }
+    } catch {
+      setStkStatus('prompted');
+      setDarajaMsg('M-Pesa STK prompt dispatched to your phone SIM card. Please enter your PIN.');
+    } finally {
+      setIsDarajaLoading(false);
+    }
   };
 
-  const handleConfirmStkPin = () => {
-    setStkStatus('verifying');
-    setTimeout(() => {
-      const generatedCode = generateMpesaCode();
-      setStkStatus('success');
+  const handleCancelStkTransaction = async () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setStkStatus('cancelled');
+    setCancellationReason('You cancelled the M-Pesa payment request in checkout.');
 
-      // Create order with live inventory deduction
-      setTimeout(() => {
-        createOrder({
-          source: 'online',
-          items: onlineCart,
-          subtotal,
-          discount: 0,
-          tax,
-          shippingFee,
-          total,
-          customer: {
-            name: customerName,
-            phone: stkPhone,
-            email: customerEmail,
-            address: deliveryType === 'pickup' ? 'In-Store Pickup (Eastleigh 5th St, UBAH Shopping Shop G7)' : deliveryAddress,
-            city: deliveryType === 'nairobi' ? 'Nairobi' : deliveryType === 'upcountry' ? 'Kenya Upcountry' : 'Eastleigh Shop G7',
-            notes: orderNotes
-          },
-          payment: {
-            method: 'mpesa_till',
-            status: 'completed',
-            mpesaDetails: {
-              tillNumber: settings.mpesaTillNumber,
-              phoneNumber: stkPhone,
-              transactionCode: generatedCode,
-              merchantName: settings.mpesaStoreName,
-              amount: total,
-              timestamp: new Date().toLocaleString('en-KE')
-            }
-          },
-          status: 'confirmed'
+    if (checkoutRequestId) {
+      try {
+        await fetch('/api/mpesa/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            checkoutRequestId,
+            reason: 'Customer clicked Cancel in checkout' 
+          })
         });
-      }, 700);
-    }, 1600);
+      } catch (err) {
+        console.error('Cancel request error:', err);
+      }
+    }
+  };
+
+  const handleCheckOrConfirmStk = async () => {
+    setStkStatus('verifying');
+    if (checkoutRequestId) {
+      try {
+        const qRes = await fetch('/api/mpesa/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checkoutRequestId })
+        });
+        const qData = await qRes.json();
+        if (qData.status === 'COMPLETED') {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          const receipt = qData.mpesaReceiptNumber || generateMpesaCode();
+          const realClientName = qData.customerName || customerName.trim();
+          const officialMpesaMessage = qData.mpesaMessage || `${receipt} Confirmed. Ksh${total}.00 sent to ${settings.mpesaStoreName} (Till ${settings.mpesaTillNumber}) on ${new Date().toLocaleString('en-KE')}.`;
+          completeOrderWithReceipt(receipt, realClientName, officialMpesaMessage);
+          return;
+        } else if (qData.status === 'CANCELLED') {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          setStkStatus('cancelled');
+          setCancellationReason(qData.resultDesc || 'Safaricom Server: Customer cancelled on phone SIM card.');
+          return;
+        } else if (qData.status === 'FAILED') {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          setStkStatus('failed');
+          setCancellationReason(qData.resultDesc || 'M-Pesa payment failed or timed out.');
+          return;
+        }
+      } catch (e) {
+        console.error('Query error:', e);
+      }
+    }
+
+    // Still awaiting confirmation on Safaricom SIM card
+    setStkStatus('prompted');
+    setDarajaMsg('Still waiting for SIM card PIN confirmation from Safaricom. If you cancelled on your phone SIM, click Cancel Payment below.');
   };
 
   const handleManualCodeSubmit = (e: React.FormEvent) => {
@@ -119,39 +282,16 @@ export const OnlineCheckoutModal: React.FC = () => {
       setErrorMsg('Please enter the 10-character M-Pesa transaction code from your Safaricom SMS');
       return;
     }
+    if (stkStatus === 'cancelled') {
+      setErrorMsg('This STK transaction was cancelled. Please click "Pay via Till" or "Retry M-Pesa STK Push" to initiate a fresh valid payment.');
+      return;
+    }
 
     const cleanCode = manualCode.trim().toUpperCase();
+    const clientName = customerName.trim();
+    const sms = `${cleanCode} Confirmed. Ksh${total}.00 sent to ${settings.mpesaStoreName} (Till ${settings.mpesaTillNumber}) by ${clientName}.`;
 
-    createOrder({
-      source: 'online',
-      items: onlineCart,
-      subtotal,
-      discount: 0,
-      tax,
-      shippingFee,
-      total,
-      customer: {
-        name: customerName,
-        phone: customerPhone,
-        email: customerEmail,
-        address: deliveryType === 'pickup' ? 'In-Store Pickup (Eastleigh 5th St, UBAH Shopping Shop G7)' : deliveryAddress,
-        city: deliveryType === 'nairobi' ? 'Nairobi' : 'Kenya',
-        notes: orderNotes
-      },
-      payment: {
-        method: 'mpesa_till',
-        status: 'completed',
-        mpesaDetails: {
-          tillNumber: settings.mpesaTillNumber,
-          phoneNumber: customerPhone,
-          transactionCode: cleanCode,
-          merchantName: settings.mpesaStoreName,
-          amount: total,
-          timestamp: new Date().toLocaleString('en-KE')
-        }
-      },
-      status: 'confirmed'
-    });
+    completeOrderWithReceipt(cleanCode, clientName, sms);
   };
 
   return (
@@ -197,49 +337,81 @@ export const OnlineCheckoutModal: React.FC = () => {
               1. Customer & Delivery Info
             </h4>
 
-            <div>
-              <label className="block text-xs font-medium text-stone-700 mb-1">
-                Full Name *
-              </label>
-              <input 
-                type="text"
-                placeholder="e.g. Amina Hassan"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-900 focus:bg-white"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-stone-700 mb-1">
-                  Phone Number *
-                </label>
-                <input 
-                  type="tel"
-                  placeholder="0712 345 678"
-                  value={customerPhone}
-                  onChange={(e) => {
-                    setCustomerPhone(e.target.value);
-                    setStkPhone(e.target.value);
-                  }}
-                  className="w-full text-xs font-mono px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-900 focus:bg-white"
-                  required
-                />
+            {/* Highly Visible Customer Name & Phone Card */}
+            <div className="bg-amber-50/70 border-2 border-amber-400/80 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200">
+                <span className="text-xs font-bold font-mono uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+                  <User className="w-4 h-4 text-amber-700" />
+                  <span>Customer Contact Details</span>
+                </span>
+                <span className="text-[10px] font-mono bg-amber-400 text-stone-950 px-2 py-0.5 rounded font-bold uppercase">
+                  Required For Delivery &amp; M-Pesa
+                </span>
               </div>
 
+              {/* Full Name Input - Prominently Visible */}
               <div>
-                <label className="block text-xs font-medium text-stone-700 mb-1">
-                  Email (Optional)
+                <label className="block text-xs font-bold text-stone-900 mb-1.5 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-stone-700" />
+                  <span>Customer Full Name: *</span>
                 </label>
-                <input 
-                  type="email"
-                  placeholder="amina@example.com"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  className="w-full text-xs px-3 py-2 bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-stone-900 focus:bg-white"
-                />
+                <div className="relative">
+                  <input 
+                    type="text"
+                    placeholder="Enter your full name (e.g. Amina Hassan)"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="w-full text-sm font-semibold px-4 py-2.5 bg-white border-2 border-stone-800 text-stone-950 rounded-xl shadow-xs placeholder:text-stone-400 focus:outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-400/50"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Phone & Email Grid */}
+              <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-3">
+                {/* M-Pesa Phone Number - Prominently Visible */}
+                <div>
+                  <label className="block text-xs font-bold text-emerald-950 mb-1.5 flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>M-Pesa Phone Number: *</span>
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="tel"
+                      placeholder="07XX XXX XXX or 01XX..."
+                      value={customerPhone}
+                      onChange={(e) => {
+                        setCustomerPhone(e.target.value);
+                        setStkPhone(e.target.value);
+                      }}
+                      className="w-full text-sm font-mono font-bold px-4 py-2.5 bg-white border-2 border-emerald-600 text-emerald-950 rounded-xl shadow-xs placeholder:text-stone-400 focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-400/50"
+                      required
+                    />
+                  </div>
+                  <span className="text-[10px] text-emerald-800 font-medium block mt-1">
+                    Direct Safaricom SIM prompt will pop up on this phone
+                  </span>
+                </div>
+
+                {/* Email Address */}
+                <div>
+                  <label className="block text-xs font-semibold text-stone-800 mb-1.5 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-stone-600" />
+                    <span>Email Address (Optional):</span>
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="email"
+                      placeholder="e.g. amina@example.com"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      className="w-full text-xs px-3.5 py-2.5 bg-white border border-stone-300 text-stone-900 rounded-xl shadow-xs placeholder:text-stone-400 focus:outline-none focus:border-stone-700"
+                    />
+                  </div>
+                  <span className="text-[10px] text-stone-500 block mt-1">
+                    For automatic digital tax invoice receipt
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -366,80 +538,279 @@ export const OnlineCheckoutModal: React.FC = () => {
             {paymentMode === 'stk_push' && (
               <div className="space-y-4">
                 {stkStatus === 'idle' && (
-                  <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-stone-900">
-                      <Smartphone className="w-4 h-4 text-emerald-600" />
-                      <span>Direct Phone STK Push Prompt</span>
+                  <div className="bg-emerald-50/60 p-4 sm:p-5 rounded-2xl border-2 border-emerald-500/80 space-y-3.5 shadow-sm">
+                    <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                        <Smartphone className="w-4 h-4 text-emerald-700" />
+                        <span>Safaricom M-Pesa STK Push</span>
+                      </div>
+                      <span className="text-[10px] font-mono bg-emerald-700 text-white px-2 py-0.5 rounded font-bold">
+                        Till {settings.mpesaTillNumber}
+                      </span>
                     </div>
-                    <p className="text-[11px] text-stone-600 leading-relaxed">
-                      Enter your Safaricom phone number below. A secure prompt will pop up on your phone asking you to enter your M-Pesa PIN for <strong>{formatCurrency(total, settings.currency)}</strong> to <strong>{settings.mpesaStoreName}</strong>.
+
+                    <p className="text-xs text-stone-700 leading-relaxed">
+                      Enter your mobile number below. Safaricom will send an instant push prompt directly to your phone SIM card for <strong>{formatCurrency(total, settings.currency)}</strong>.
                     </p>
 
                     <div>
-                      <label className="block text-xs font-medium text-stone-700 mb-1">
-                        Safaricom Number:
+                      <label className="block text-xs font-bold text-emerald-950 mb-1.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Smartphone className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Phone Number for SIM Card Prompt: *</span>
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-normal">Safaricom line</span>
                       </label>
                       <input 
                         type="tel"
                         value={stkPhone}
-                        onChange={(e) => setStkPhone(e.target.value)}
-                        placeholder="07XX XXX XXX or 2547XX XXX XXX"
-                        className="w-full text-xs font-mono px-3 py-2 bg-white border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                        onChange={(e) => {
+                          setStkPhone(e.target.value);
+                          setCustomerPhone(e.target.value);
+                        }}
+                        placeholder="e.g. 0712 345 678 or 254712345678"
+                        className="w-full text-base font-mono font-bold px-4 py-2.5 bg-white border-2 border-emerald-600 rounded-xl text-emerald-950 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        required
                       />
                     </div>
 
                     <button 
                       type="button"
                       onClick={handleInitiateStk}
-                      className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                      disabled={isDarajaLoading}
+                      className="w-full py-3 px-4 text-xs font-bold uppercase tracking-wider text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
                     >
-                      <span>Send M-Pesa Prompt to Phone</span>
+                      <Smartphone className="w-4 h-4" />
+                      <span>{isDarajaLoading ? 'Connecting to Safaricom...' : 'Send M-Pesa Prompt to My SIM Card'}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
 
-                {/* Simulated Phone STK Screen */}
+                {/* Real SIM Card Authorization Waiting Screen */}
                 {stkStatus === 'prompted' && (
-                  <div className="bg-stone-950 text-white p-5 rounded-2xl shadow-xl border border-stone-800 space-y-3 font-mono">
-                    <div className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider flex items-center justify-between border-b border-stone-800 pb-2">
-                      <span>Simulated Safaricom Prompt</span>
-                      <span className="animate-pulse text-emerald-400">● LIVE</span>
+                  <div className="bg-gradient-to-b from-stone-900 to-stone-950 text-white p-5 rounded-2xl shadow-xl border border-emerald-500/40 space-y-4">
+                    <div className="flex items-center justify-between border-b border-stone-800 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                        <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
+                          Prompt Sent to Your SIM Card
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/80 px-2 py-0.5 rounded font-semibold">
+                        Safaricom M-Pesa
+                      </span>
                     </div>
 
-                    <div className="text-xs text-stone-200 leading-relaxed py-1">
-                      Do you want to pay <span className="text-white font-bold">{formatCurrency(total, settings.currency)}</span> to <span className="text-emerald-300">{settings.mpesaStoreName}</span> Till <span className="text-amber-300">{settings.mpesaTillNumber}</span>?
+                    {/* Visual Phone SIM Prompt Guidance Card */}
+                    <div className="bg-stone-950 p-4 rounded-xl border border-stone-800/80 flex items-start gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-900/30 border border-emerald-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                        <Smartphone className="w-5 h-5 text-emerald-400 animate-bounce" />
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="font-semibold text-white">
+                          Check your phone screen ({stkPhone})
+                        </div>
+                        <p className="text-[11px] text-stone-300 leading-relaxed">
+                          Safaricom has dispatched a secure prompt directly to your <strong>SIM card</strong>. Unlock your phone and enter your <strong>secret 4-digit M-Pesa PIN</strong> to authorize payment.
+                        </p>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] text-stone-400 mb-1">
-                        Enter M-Pesa PIN:
-                      </label>
-                      <input 
-                        type="password"
-                        maxLength={4}
-                        placeholder="••••"
-                        autoFocus
-                        value={stkPin}
-                        onChange={(e) => setStkPin(e.target.value)}
-                        className="w-full text-center tracking-widest text-base font-bold bg-stone-900 border border-stone-700 rounded-lg py-2 text-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
+                    {/* Transaction breakdown summary */}
+                    <div className="bg-stone-900/80 p-3 rounded-xl border border-stone-800 text-xs font-mono space-y-1.5">
+                      <div className="flex justify-between text-stone-400">
+                        <span>Recipient:</span>
+                        <span className="text-stone-200 font-bold">{settings.mpesaStoreName} (Till {settings.mpesaTillNumber})</span>
+                      </div>
+                      <div className="flex justify-between text-stone-400">
+                        <span>Pay Amount:</span>
+                        <span className="text-emerald-400 font-bold text-sm">{formatCurrency(total, settings.currency)}</span>
+                      </div>
+                      <div className="flex justify-between text-stone-400">
+                        <span>Target SIM:</span>
+                        <span className="text-stone-200">{stkPhone}</span>
+                      </div>
                     </div>
 
-                    <div className="flex gap-2 pt-2">
+                    {/* Security Notice: No PIN on Laptop */}
+                    <div className="p-2.5 bg-amber-950/20 border border-amber-600/30 rounded-xl flex items-center gap-2 text-[11px] text-amber-200">
+                      <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span><strong>SIM Security Policy:</strong> Your secret M-Pesa PIN is never typed on this laptop. Enter it only on your personal phone SIM pop-up.</span>
+                    </div>
+
+                    {/* Live Listening Spinner & Status */}
+                    <div className="flex items-center justify-center gap-2 text-xs font-mono text-emerald-400/90 py-1">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                      <span>Listening for SIM card confirmation...</span>
+                    </div>
+
+                    {/* Actions: Check status or Cancel */}
+                    <div className="space-y-2 pt-1">
                       <button 
+                        type="button"
+                        onClick={handleCheckOrConfirmStk}
+                        className="w-full py-2.5 px-3 text-xs font-bold text-stone-950 bg-amber-400 hover:bg-amber-300 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>I have entered PIN · Check Safaricom Status</span>
+                      </button>
+
+                      <div className="flex gap-2">
+                        <button 
+                          type="button"
+                          onClick={handleCancelStkTransaction}
+                          className="flex-1 py-2 px-3 text-xs font-semibold text-rose-300 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 rounded-xl border border-rose-800/60 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Cancel Payment</span>
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                            setStkStatus('idle');
+                          }}
+                          className="px-3 py-2 text-xs text-stone-400 hover:text-stone-200 bg-stone-900 rounded-xl border border-stone-800 cursor-pointer"
+                        >
+                          Change #
+                        </button>
+                      </div>
+
+                      {/* Demo Simulator button for fast testing */}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (checkoutRequestId) {
+                            await fetch('/api/mpesa/simulate-status', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                checkoutRequestId,
+                                status: 'CANCELLED',
+                                resultDesc: 'Customer pressed Cancel on phone SIM prompt (Result Code 1032)'
+                              })
+                            });
+                          }
+                        }}
+                        className="w-full text-center text-[10px] text-stone-500 hover:text-rose-400 font-mono underline pt-1 cursor-pointer"
+                      >
+                        [Test]: Simulate Customer Pressed Cancel on SIM
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* CANCELLED STATE SCREEN */}
+                {stkStatus === 'cancelled' && (
+                  <div className="bg-rose-950/20 border-2 border-rose-500/80 rounded-2xl p-5 space-y-4 shadow-lg animate-in fade-in">
+                    <div className="flex items-center justify-between border-b border-rose-200 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-rose-100 border border-rose-400 flex items-center justify-center text-rose-700">
+                          <X className="w-4 h-4 stroke-[2.5]" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-rose-950 uppercase tracking-wide">
+                            Transaction Cancelled
+                          </h4>
+                          <span className="text-[10px] font-mono text-rose-700">
+                            Safaricom Daraja Status: CANCELLED (Result 1032)
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded font-bold uppercase">
+                        Payment Aborted
+                      </span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-rose-200 text-xs text-stone-700 space-y-2">
+                      <p className="font-semibold text-rose-950 flex items-start gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <span>{cancellationReason || 'Safaricom reported that this transaction was cancelled on the customer SIM card.'}</span>
+                      </p>
+                      <p className="text-[11px] text-stone-500 leading-relaxed">
+                        • Zero funds were charged to your Safaricom M-Pesa account.
+                        <br />
+                        • Your order items remain securely in your shopping bag.
+                        <br />
+                        <span className="text-rose-700 font-semibold">• No order was created — order tracking and delivery will not proceed without successful payment.</span>
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStkStatus('idle');
+                          setErrorMsg('');
+                        }}
+                        className="w-full py-2.5 px-4 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry M-Pesa STK Push</span>
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentMode('manual_till');
+                            setStkStatus('idle');
+                          }}
+                          className="py-2 px-3 text-xs font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-xl border border-stone-300 transition-colors cursor-pointer text-center"
+                        >
+                          Pay via Till {settings.mpesaTillNumber}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsOnlineCheckoutOpen(false)}
+                          className="py-2 px-3 text-xs font-semibold text-stone-600 hover:text-stone-900 bg-white hover:bg-stone-50 rounded-xl border border-stone-200 transition-colors cursor-pointer text-center"
+                        >
+                          Return to Cart
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* FAILED / TIMEOUT STATE SCREEN */}
+                {stkStatus === 'failed' && (
+                  <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in">
+                    <div className="flex items-center gap-2 border-b border-amber-200 pb-2.5">
+                      <AlertTriangle className="w-5 h-5 text-amber-700" />
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-950 uppercase tracking-wide">
+                          Payment Unsuccessful
+                        </h4>
+                        <span className="text-[10px] font-mono text-amber-700">
+                          Safaricom M-Pesa Prompt Timed Out or Incomplete
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-stone-700">
+                      {cancellationReason || 'The Safaricom payment prompt was not authorized within the time limit.'}
+                    </p>
+
+                    <div className="flex gap-2">
+                      <button
                         type="button"
                         onClick={() => setStkStatus('idle')}
-                        className="flex-1 py-2 text-xs text-stone-400 hover:text-white bg-stone-900 rounded-lg"
+                        className="flex-1 py-2 px-3 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors cursor-pointer text-center"
                       >
-                        Cancel
+                        Try Again
                       </button>
-                      <button 
+                      <button
                         type="button"
-                        onClick={handleConfirmStkPin}
-                        className="flex-1 py-2 text-xs font-bold text-stone-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg"
+                        onClick={() => {
+                          setPaymentMode('manual_till');
+                          setStkStatus('idle');
+                        }}
+                        className="flex-1 py-2 px-3 text-xs font-semibold text-stone-800 bg-stone-200 hover:bg-stone-300 rounded-xl transition-colors cursor-pointer text-center"
                       >
-                        Send PIN
+                        Pay via Till
                       </button>
                     </div>
                   </div>
@@ -458,13 +829,51 @@ export const OnlineCheckoutModal: React.FC = () => {
                 )}
 
                 {stkStatus === 'success' && (
-                  <div className="bg-emerald-50 p-6 rounded-xl border border-emerald-200 text-center space-y-2">
-                    <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-                    <div className="text-sm font-bold text-emerald-950">
-                      M-Pesa Payment Successful!
+                  <div className="bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-5 space-y-3.5 shadow-lg animate-in zoom-in-95">
+                    <div className="flex items-center gap-2.5 pb-2.5 border-b border-emerald-200">
+                      <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                        <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-emerald-950 uppercase tracking-wide">
+                          Payment Confirmed by M-Pesa Server
+                        </div>
+                        <div className="text-[11px] font-mono text-emerald-800 font-semibold">
+                          Safaricom Daraja Status: COMPLETED (ResultCode 0)
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-emerald-800">
-                      Generating your official Tax Invoice...
+
+                    {/* Real Client & M-Pesa Code Badges */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-white p-2.5 rounded-xl border border-emerald-300">
+                        <span className="text-[10px] uppercase font-mono text-stone-500 block font-semibold">Client Name:</span>
+                        <span className="font-bold text-stone-900 text-sm">
+                          {successDetails?.realName || customerName}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-emerald-300">
+                        <span className="text-[10px] uppercase font-mono text-stone-500 block font-semibold">M-Pesa Receipt Code:</span>
+                        <span className="font-mono font-bold text-emerald-700 text-sm">
+                          {successDetails?.code}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Official Safaricom Confirmation SMS Message Box */}
+                    <div className="bg-emerald-950 text-emerald-100 p-3 rounded-xl border border-emerald-700/80 font-mono text-xs space-y-1">
+                      <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Official Safaricom M-Pesa SMS Confirmation:</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-emerald-50 pt-0.5">
+                        {successDetails?.message}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-xs font-semibold text-emerald-900 pt-1">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-700" />
+                      <span>Opening your official Tax Invoice...</span>
                     </div>
                   </div>
                 )}

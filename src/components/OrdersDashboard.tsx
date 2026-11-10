@@ -22,7 +22,9 @@ export const OrdersDashboard: React.FC = () => {
     settings, 
     openInvoice, 
     updateOrderStatus, 
-    setActiveView 
+    setActiveView,
+    clearAllOrders,
+    isShopOwner 
   } = useStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,11 +60,24 @@ export const OrdersDashboard: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs text-stone-500 mt-1">
-            Complete transaction ledger with automatic Tax Invoices, M-Pesa Till receipts, and delivery states
+            Space reserved exclusively for real incoming customer orders · Automatic Tax Invoices &amp; Safaricom Till receipts
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {isShopOwner && orders.length > 0 && (
+            <button 
+              onClick={() => {
+                if (window.confirm('Are you sure you want to delete all cached orders to keep pure space for real incoming orders?')) {
+                  clearAllOrders();
+                }
+              }}
+              className="px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+            >
+              Purge All Orders
+            </button>
+          )}
+
           <button 
             onClick={() => setActiveView('pos')}
             className="px-3.5 py-2 text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 rounded-lg transition-colors cursor-pointer"
@@ -183,8 +198,22 @@ export const OrdersDashboard: React.FC = () => {
             <tbody className="divide-y divide-stone-100">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-stone-500">
-                    No orders matching query
+                  <td colSpan={8} className="py-16 text-center">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center mx-auto">
+                        <FileText className="w-6 h-6 text-amber-700" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-stone-900">
+                          {orders.length === 0 ? 'Space Reserved for Real Incoming Orders' : 'No Orders Matching Filters'}
+                        </h4>
+                        <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                          {orders.length === 0 
+                            ? 'All mock orders deleted. Live orders from Safaricom M-Pesa Till 5428901 and POS boutique sales will appear here automatically upon verified payment.' 
+                            : 'Try adjusting your search keywords, sales channel, or order status filter.'}
+                        </p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (

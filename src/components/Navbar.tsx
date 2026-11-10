@@ -6,7 +6,6 @@ import {
   Package, 
   FileText, 
   Layers, 
-  SlidersHorizontal,
   PhoneCall,
   Menu,
   X,
@@ -32,11 +31,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
     getOnlineCartTotal, 
     setIsCartDrawerOpen, 
     setIsTrackingModalOpen,
-    setIsSettingsModalOpen,
     setIsAiAssistantOpen,
     posStaffUser,
     posPortalIntent,
-    setPosPortalIntent
+    setPosPortalIntent,
+    isShopOwner
   } = useStore();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -169,22 +168,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
           </div>
 
           <button 
-            onClick={() => handleNavClick('inventory')}
-            className={`cursor-pointer transition-colors py-1 hover:text-amber-300 flex items-center gap-1.5 ${activeView === 'inventory' ? 'text-amber-400 font-semibold border-b-2 border-amber-400' : ''}`}
-          >
-            <Layers className="w-4 h-4 text-stone-400" />
-            <span>Inventory</span>
-          </button>
-
-          <button 
-            onClick={() => handleNavClick('orders')}
-            className={`cursor-pointer transition-colors py-1 hover:text-amber-300 flex items-center gap-1.5 ${activeView === 'orders' ? 'text-amber-400 font-semibold border-b-2 border-amber-400' : ''}`}
-          >
-            <FileText className="w-4 h-4 text-stone-400" />
-            <span>Orders &amp; Invoices</span>
-          </button>
-
-          <button 
             onClick={() => setIsTrackingModalOpen(true)}
             className="cursor-pointer transition-colors py-1 hover:text-amber-300 flex items-center gap-1"
           >
@@ -271,15 +254,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
             </button>
           )}
 
-          {/* Store Settings modal */}
-          <button 
-            onClick={() => setIsSettingsModalOpen(true)}
-            title="Configure M-Pesa Till & Store"
-            className="p-2 text-stone-400 hover:text-amber-300 transition-colors rounded-lg hover:bg-stone-900 hidden sm:block cursor-pointer"
-          >
-            <SlidersHorizontal className="w-4.5 h-4.5" />
-          </button>
-
           {/* Shopping Cart Drawer Trigger */}
           <button 
             onClick={() => setIsCartDrawerOpen(true)}
@@ -353,6 +327,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
                 <span className="text-[10px] font-mono text-stone-400">Sales</span>
               </button>
             </div>
+
             <button 
               onClick={() => {
                 setIsAiAssistantOpen(true);
@@ -362,20 +337,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearchChange, searchQuery = ''
             >
               <Sparkles className="w-4 h-4 text-amber-400" />
               <span>AI Client Concierge (Sizing &amp; Location)</span>
-            </button>
-            <button 
-              onClick={() => handleNavClick('inventory')}
-              className={`text-left px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 ${activeView === 'inventory' ? 'bg-stone-800 text-white font-bold' : 'text-stone-300'}`}
-            >
-              <Layers className="w-4 h-4 text-stone-400" />
-              <span>Inventory &amp; Restock</span>
-            </button>
-            <button 
-              onClick={() => handleNavClick('orders')}
-              className={`text-left px-3 py-2 text-sm font-medium rounded-lg flex items-center gap-2 ${activeView === 'orders' ? 'bg-stone-800 text-white font-bold' : 'text-stone-300'}`}
-            >
-              <FileText className="w-4 h-4 text-stone-400" />
-              <span>Orders &amp; Invoices</span>
             </button>
             <button 
               onClick={() => {

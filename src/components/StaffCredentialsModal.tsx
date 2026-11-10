@@ -45,6 +45,61 @@ interface VaultStaffRecord {
   lastAudit: string;
 }
 
+const DEFAULT_VAULT_RECORDS: VaultStaffRecord[] = [
+  {
+    id: "staff-owner-01",
+    name: "Nimrah (Proprietor)",
+    email: "nimrahcollection1@gmail.com",
+    role: "Shop Owner",
+    badgeNumber: "NC-OWN-01",
+    branch: "Eastleigh 5th St (UBAH G7)",
+    clearanceTier: "Tier 1 (Executive Confidential · Sovereign)",
+    maskedCredential: "Nim••••026",
+    mfaRequired: true,
+    status: "Active & Verified",
+    lastAudit: "2026-11-01"
+  },
+  {
+    id: "staff-owner-02",
+    name: "Diba Karim (Shop Owner)",
+    email: "dibakarim307@gmail.com",
+    role: "Shop Owner",
+    badgeNumber: "NC-OWN-02",
+    branch: "Eastleigh 5th St (UBAH G7)",
+    clearanceTier: "Tier 1 (Executive Confidential · Sovereign)",
+    maskedCredential: "Nim••••026",
+    mfaRequired: true,
+    status: "Active & Verified",
+    lastAudit: "2026-11-01"
+  },
+  {
+    id: "staff-admin-01",
+    name: "Store Administrator",
+    email: "admin@nimrahcollection.co.ke",
+    role: "System Admin",
+    badgeNumber: "NC-ADM-01",
+    branch: "Eastleigh 5th St (UBAH G7)",
+    clearanceTier: "Tier 2 (Operational Admin · Restock & Terminal)",
+    maskedCredential: "Adm••••026",
+    mfaRequired: true,
+    status: "Active & Verified",
+    lastAudit: "2026-11-01"
+  },
+  {
+    id: "staff-cashier-01",
+    name: "Fatuma K.",
+    email: "fatuma.eastleigh@nimrahcollection.co.ke",
+    role: "Lead Cashier",
+    badgeNumber: "NC-CSH-02",
+    branch: "Eastleigh 5th St (UBAH G7)",
+    clearanceTier: "Tier 3 (Terminal Cashier · Checkout Only)",
+    maskedCredential: "Eas••••#G7",
+    mfaRequired: true,
+    status: "Active & Verified",
+    lastAudit: "2026-11-01"
+  }
+];
+
 export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
   isOpen,
   onClose,
@@ -64,7 +119,7 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Shop Owner credential override state
-  const [vaultRecords, setVaultRecords] = useState<VaultStaffRecord[]>([]);
+  const [vaultRecords, setVaultRecords] = useState<VaultStaffRecord[]>(DEFAULT_VAULT_RECORDS);
   const [isLoadingVault, setIsLoadingVault] = useState(false);
   const [selectedStaffForReset, setSelectedStaffForReset] = useState<VaultStaffRecord | null>(null);
   const [ownerOverridePassword, setOwnerOverridePassword] = useState('');
@@ -77,13 +132,23 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
   const fetchVault = async () => {
     setIsLoadingVault(true);
     try {
-      const res = await fetch('/api/pos/auth/credentials-vault');
-      const data = await res.json();
-      if (data.success && data.vaultRecords) {
-        setVaultRecords(data.vaultRecords);
+      const res = await fetch('/api/pos/auth/credentials-vault', {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.vaultRecords) && data.vaultRecords.length > 0) {
+            setVaultRecords(data.vaultRecords);
+            return;
+          }
+        }
       }
-    } catch (err) {
-      console.error('Failed to load credentials vault', err);
+      setVaultRecords(DEFAULT_VAULT_RECORDS);
+    } catch {
+      // Fallback to default records if network is offline
+      setVaultRecords(DEFAULT_VAULT_RECORDS);
     } finally {
       setIsLoadingVault(false);
     }
@@ -95,9 +160,11 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      fetchVault();
+      if (isOwner) {
+        fetchVault();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, isOwner]);
 
   if (!isOpen || !posStaffUser) return null;
 
@@ -133,6 +200,17 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
         })
       });
 
+      if (!response.ok) {
+        setFeedback({ type: 'error', message: 'Authentication server unavailable. Please try again.' });
+        return;
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        setFeedback({ type: 'error', message: 'Unexpected response from server.' });
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -147,7 +225,7 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
       } else {
         setFeedback({ type: 'error', message: data.message || 'Failed to update credentials' });
       }
-    } catch (err: any) {
+    } catch {
       setFeedback({ type: 'error', message: 'Network error communicating with authentication server.' });
     } finally {
       setIsSubmitting(false);
@@ -162,7 +240,7 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
     try {
       const res = await fetch('/api/pos/auth/reset-staff-credential', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
           ownerEmail: posStaffUser.email,
           ownerPassword: ownerOverridePassword,
@@ -170,6 +248,17 @@ export const StaffCredentialsModal: React.FC<StaffCredentialsModalProps> = ({
           newPassword: newStaffAssignedPassword
         })
       });
+
+      if (!res.ok) {
+        alert('Server returned an error resetting credentials');
+        return;
+      }
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        alert('Unexpected server response format');
+        return;
+      }
 
       const data = await res.json();
       if (data.success) {

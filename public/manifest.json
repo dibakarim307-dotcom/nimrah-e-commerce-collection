@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Nimrah Collection - Haute Modesty & Retail POS",
+  "short_name": "Nimrah POS",
+  "description": "Luxury fashion e-commerce boutique & retail POS with live inventory, M-Pesa Till settlement, and thermal receipts.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0d",
+  "theme_color": "#0a0a0d",
+  "categories": ["shopping", "business", "finance"],
+  "icons": [
+    {
+      "src": "/assets/aistudio/IMG-20261031-WA0002_37814c74.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/IMG-20261031-WA0002_37814c74.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

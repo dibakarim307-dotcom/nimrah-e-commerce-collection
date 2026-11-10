@@ -1,0 +1,33 @@
+[
+  {
+    "id": "prod-04",
+    "name": "Nimrah Noir Extrait de Parfum (50ml)",
+    "sku": "NC-FRG-04",
+    "barcode": "616400192834",
+    "category": "Signature Fragrance",
+    "collection": "Haute Parfumerie",
+    "price": 9500,
+    "costPrice": 4200,
+    "stock": 25,
+    "lowStockThreshold": 6,
+    "sizes": [
+      "50ml Extrait",
+      "100ml Extrait"
+    ],
+    "colors": [
+      {
+        "name": "Amber Noir Flacon",
+        "hex": "#78350f"
+      }
+    ],
+    "images": [
+      "/src/assets/images/product_signature_perfume_1793448136885.jpg"
+    ],
+    "description": "Our signature boutique extrait de parfum. A hypnotic, lingering blend of smoky Cambodian Agarwood, Bulgarian Damask Rose, Tahitian Vanilla bean, and warm amber resin with a 35% oil concentration for 24-hour sillage.",
+    "fabric": "Bespoke Italian Amber Glass Flacon with Magnetic Onyx Cap",
+    "careInstructions": "Store in cool dark environment away from direct sunlight",
+    "isFeatured": true,
+    "rating": 5,
+    "reviewsCount": 62
+  }
+]

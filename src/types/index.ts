@@ -43,7 +43,7 @@ export interface CartItem {
 }
 
 export type PaymentMethod = 'mpesa_till' | 'cash' | 'card' | 'split';
-export type PaymentStatus = 'pending' | 'completed' | 'failed';
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
 
 export interface MpesaPaymentDetails {
   tillNumber: string;
@@ -53,6 +53,8 @@ export interface MpesaPaymentDetails {
   amount: number;
   timestamp: string;
   reference?: string;
+  message?: string;
+  clientRealName?: string;
 }
 
 export interface OrderCustomer {
@@ -144,5 +146,11 @@ export interface PosVerificationSession {
   code: string;
   expiresAt: number;
 }
-
-
+export interface ShowcaseSlide {
+  id: string;
+  imageUrl: string;
+  title: string;
+  subtitle: string;
+  badge?: string;
+  createdAt?: string;
+}
