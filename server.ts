@@ -192,7 +192,7 @@ app.post('/api/products', (req, res) => {
       console.warn(`[SECURITY] Blocked non-owner attempt to add product: role=${staffRole}, email=${staffEmail}`);
       res.status(403).json({ 
         success: false, 
-        message: 'Security Restriction: Only the Shop Owner (Diba Karim) is authorized to add products.' 
+        message: 'Security Restriction: Only the Shop Owner (shop owner) is authorized to add products.' 
       });
       return;
     }
